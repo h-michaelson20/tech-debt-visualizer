@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * CLI entry: colorful terminal output, progress bars, actionable insights.
+ * Loads .env from cwd first; supports --llm-key and --llm-model.
  */
-
-import "dotenv/config";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { loadEnv } from "./load-env.js";
 import { Command } from "commander";
 import chalk from "chalk";
 import cliProgress from "cli-progress";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { getCleanlinessTier } from "./cleanliness-score.js";
 import { runAnalysis } from "./engine.js";
 import {
@@ -21,14 +21,14 @@ import {
 import { generateHtmlReport } from "./reports/html.js";
 import { generateJsonReport } from "./reports/json.js";
 import { generateMarkdownReport } from "./reports/markdown.js";
-import type { AnalysisRun, DebtItem } from "./types.js";
+import type { AnalysisRun } from "./types.js";
 
 const program = new Command();
 
 program
   .name("tech-debt")
   .description("Analyze repositories and visualize technical debt with AI-powered insights")
-  .version("0.1.0");
+  .version("0.1.2");
 
 program
   .command("analyze")
@@ -37,13 +37,15 @@ program
   .option("-o, --output <path>", "Output file path (default: report.html or stdout for CLI)")
   .option("-f, --format <type>", "Output format: cli | html | json | markdown", "cli")
   .option("--no-llm", "Skip LLM-powered insights")
+  .option("--llm", "Enable LLM (default). Use with --llm-key and/or --llm-model")
+  .option("--llm-key <key>", "API key for LLM (overrides GEMINI_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY)")
+  .option("--llm-model <model>", "Model name (e.g. gemini-1.5-flash, gpt-4o-mini)")
   .option("--ci", "CI mode: minimal output, exit with non-zero if debt score is high")
-  .action(async (path: string, opts: { output?: string; format?: string; llm?: boolean; ci?: boolean }) => {
+  .action(async (path: string, opts: { output?: string; format?: string; llm?: boolean; ci?: boolean; llmKey?: string; llmModel?: string }) => {
     const repoPath = join(process.cwd(), path);
     const format = (opts.format ?? "cli") as "cli" | "html" | "json" | "markdown";
     const useLlm = opts.llm !== false;
     const outputPath = opts.output ?? (format === "html" ? "tech-debt-report.html" : undefined);
-
     const totalSteps = useLlm ? 6 : 4;
     const progress = new cliProgress.SingleBar(
       {
@@ -53,19 +55,16 @@ program
       },
       cliProgress.Presets.shades_classic
     );
-
     try {
       process.stderr.write(chalk.bold.blue("\n  Technical Debt Visualizer\n\n"));
       progress.start(totalSteps, 0, { task: "Discovering files..." });
       progress.update(1, { task: "Discovering files..." });
-
       const run = await runAnalysis({
         repoPath,
         maxFiles: 1500,
         gitDays: 90,
       });
       progress.update(2, { task: "Analyzing..." });
-
       const fileContents = new Map<string, string>();
       for (const f of run.fileMetrics.map((m) => m.file)) {
         try {
@@ -74,14 +73,15 @@ program
           // ignore
         }
       }
-
+      const llmConfigOverrides = { apiKey: opts.llmKey, model: opts.llmModel };
       if (useLlm) {
-        const llmConfig = resolveLLMConfig();
+        const llmConfig = resolveLLMConfig(llmConfigOverrides);
         if (!llmConfig) {
           process.stderr.write(
             chalk.yellow(
-              "  No LLM API key found. Set one of: GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY.\n" +
-                "  Example: export GEMINI_API_KEY=your_key_here\n" +
+              "  No LLM API key found. Set GEMINI_API_KEY or OPENAI_API_KEY (or use --llm-key <key>).\n" +
+                "  Example: export GEMINI_API_KEY=your_key   or   --llm-key your_key\n" +
+                "  Or add GEMINI_API_KEY=your_key to a .env file in the current directory.\n" +
                 "  Skipping AI insights for this run.\n\n"
             )
           );
@@ -90,10 +90,11 @@ program
           const allFilePaths = run.fileMetrics.map((m) => m.file);
           const maxFiles = 80;
           const filesToAssess = run.fileMetrics.slice(0, maxFiles);
+          const config = { ...llmConfigOverrides };
           for (const m of filesToAssess) {
             const content = fileContents.get(m.file);
             if (!content) continue;
-            const result = await assessFileCleanliness(m.file, content, m, {}, { filePaths: allFilePaths });
+            const result = await assessFileCleanliness(m.file, content, m, config, { filePaths: allFilePaths });
             if (result) {
               const idx = run.fileMetrics.findIndex((x) => x.file === m.file);
               if (idx >= 0)
@@ -104,26 +105,22 @@ program
                 };
             }
           }
-
           progress.update(4, { task: "LLM: debt item insights..." });
           let debtItems = run.debtItems;
           if (debtItems.length > 0) {
-            debtItems = await enrichDebtWithInsights(debtItems.slice(0, 25), fileContents);
+            debtItems = await enrichDebtWithInsights(debtItems.slice(0, 25), fileContents, config);
             const byId = new Map(debtItems.map((d) => [d.id, d]));
             run.debtItems = run.debtItems.map((d) => byId.get(d.id) ?? d);
           }
-
           progress.update(5, { task: "LLM: overall assessment..." });
-          const overall = await assessOverallCleanliness(run);
+          const overall = await assessOverallCleanliness(run, config);
           if (overall) run.llmOverallAssessment = overall;
-          const nextSteps = await suggestNextSteps(run);
+          const nextSteps = await suggestNextSteps(run, config);
           if (nextSteps?.length) run.llmNextSteps = nextSteps;
         }
       }
-
       progress.update(totalSteps, { task: "Done" });
       progress.stop();
-
       if (format === "html" && outputPath) {
         await generateHtmlReport(run, { outputPath, title: "Technical Debt Report", darkMode: true });
         process.stdout.write(chalk.green(`\n  Report written to ${outputPath}\n\n`));
@@ -152,8 +149,7 @@ program
         if (!run.llmOverallAssessment) {
           process.stdout.write(
             chalk.dim(
-              "  To get AI insights, per-file optimization suggestions, and refactor recommendations:\n" +
-                "  set GEMINI_API_KEY or OPENAI_API_KEY and run without --no-llm.\n\n"
+              "  To get AI insights: set GEMINI_API_KEY (or OPENAI_API_KEY) or use --llm-key <key>. Run without --no-llm.\n\n"
             )
           );
         }
@@ -178,7 +174,6 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
   const { debtItems, fileMetrics, errors } = run;
   const score = getDebtScore(run);
   const cleanliness = getCleanlinessTier(score);
-
   process.stdout.write("\n");
   process.stdout.write(chalk.bold.dim("  Technical Debt Cleanliness Score\n"));
   process.stdout.write("  " + "—".repeat(52) + "\n");
@@ -186,7 +181,6 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
   process.stdout.write(tierColor(`  ${cleanliness.label} (${cleanliness.tier}/5)\n`));
   process.stdout.write(tierColor(`  ${cleanliness.description}\n`));
   process.stdout.write("  " + "—".repeat(52) + "\n\n");
-
   process.stdout.write(chalk.bold("  Summary\n"));
   process.stdout.write(chalk.dim("  " + "—".repeat(50) + "\n"));
   process.stdout.write(`  Files analyzed: ${chalk.cyan(String(fileMetrics.length))}\n`);
@@ -196,20 +190,19 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
   }
   process.stdout.write(`  Debt score:     ${severityColor(score)} / 100\n`);
   process.stdout.write(chalk.dim("  (weighted average of debt item severity × confidence, 0–100)\n\n"));
-
   const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const d of debtItems) {
     bySeverity[d.severity]++;
   }
   process.stdout.write(chalk.bold("  By severity\n"));
-  process.stdout.write(`  Critical: ${chalk.red(String(bySeverity.critical))}  High: ${chalk.yellow(String(bySeverity.high))}  Medium: ${chalk.hex("#b8860b")(String(bySeverity.medium))}  Low: ${chalk.gray(String(bySeverity.low))}\n\n`);
-
+  process.stdout.write(
+    `  Critical: ${chalk.red(String(bySeverity.critical))}  High: ${chalk.yellow(String(bySeverity.high))}  Medium: ${chalk.hex("#b8860b")(String(bySeverity.medium))}  Low: ${chalk.gray(String(bySeverity.low))}\n\n`
+  );
   if (run.llmOverallAssessment) {
     process.stdout.write(chalk.bold("  LLM overall assessment\n"));
     process.stdout.write(chalk.dim("  " + "—".repeat(50) + "\n"));
     process.stdout.write(chalk.cyan("  " + run.llmOverallAssessment.replace(/\n/g, "\n  ") + "\n\n"));
   }
-
   const hotspots = fileMetrics
     .filter((m) => (m.hotspotScore ?? 0) > 0.3)
     .sort((a, b) => (b.hotspotScore ?? 0) - (a.hotspotScore ?? 0))
@@ -226,7 +219,6 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     }
     process.stdout.write("\n");
   }
-
   process.stdout.write(chalk.bold("  Top debt items\n"));
   const top = debtItems
     .sort((a, b) => severityOrder(b.severity) - severityOrder(a.severity))
@@ -242,7 +234,6 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     }
     process.stdout.write("\n");
   }
-
   if (errors.length > 0 && !ci) {
     process.stdout.write(chalk.bold.yellow("  Parse errors\n"));
     for (const e of errors.slice(0, 5)) {
@@ -250,7 +241,6 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     }
     process.stdout.write("\n");
   }
-
   process.stdout.write(chalk.bold("  What to fix\n"));
   process.stdout.write(chalk.dim("  " + "—".repeat(50) + "\n"));
   const severityLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -264,7 +254,6 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     process.stdout.write(chalk.dim("  No debt items. Keep it up.\n"));
   }
   process.stdout.write("\n");
-
   if (run.llmNextSteps && run.llmNextSteps.length > 0) {
     process.stdout.write(chalk.bold.cyan("  Recommended next steps (AI)\n"));
     process.stdout.write(chalk.dim("  " + "—".repeat(50) + "\n"));
@@ -273,7 +262,6 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     }
     process.stdout.write("\n");
   }
-
   process.stdout.write(chalk.dim("  Run with --format html -o report.html for the interactive dashboard.\n\n"));
 }
 
@@ -299,13 +287,20 @@ function severityColor(score: number): string {
 
 function cleanlinessTierColor(tier: number): (s: string) => string {
   switch (tier) {
-    case 5: return chalk.green.bold;
-    case 4: return chalk.cyan.bold;
-    case 3: return chalk.yellow.bold;
-    case 2: return chalk.hex("#f97316").bold;
-    case 1: return chalk.red.bold;
-    default: return chalk.white.bold;
+    case 5:
+      return chalk.green.bold;
+    case 4:
+      return chalk.cyan.bold;
+    case 3:
+      return chalk.yellow.bold;
+    case 2:
+      return chalk.hex("#f97316").bold;
+    case 1:
+      return chalk.red.bold;
+    default:
+      return chalk.white.bold;
   }
 }
 
-program.parse();
+// Load .env from cwd first, then run the CLI
+loadEnv().then(() => program.parse());

@@ -79,6 +79,9 @@ Requires **Node 18+**.
 | `-f, --format` | `cli` (default), `html`, `json`, or `markdown` |
 | `-o, --output` | Output path (e.g. `report.html` for HTML) |
 | `--no-llm` | Skip all LLM calls (no API key needed) |
+| `--llm` | Enable LLM (default). Use with `--llm-key` and/or `--llm-model` |
+| `--llm-key <key>` | API key (overrides env / `.env`) |
+| `--llm-model <model>` | Model name (e.g. `gemini-1.5-flash`, `gpt-4o-mini`) |
 | `--ci` | Terse output; exit code 1 if debt score &gt; 60 |
 
 Examples:
@@ -87,6 +90,10 @@ Examples:
 node dist/cli.js analyze . -f html -o report.html
 node dist/cli.js analyze ./src -f json -o debt.json
 node dist/cli.js analyze . --ci
+# With LLM key and model on the command line:
+node dist/cli.js analyze . --llm-key YOUR_GEMINI_KEY --llm-model gemini-1.5-flash
+# Or use a .env file in the current directory (GEMINI_API_KEY=...)
+node dist/cli.js analyze .
 ```
 
 ---
@@ -94,6 +101,8 @@ node dist/cli.js analyze . --ci
 ## LLM (optional)
 
 The tool can call an LLM to get **explanations** and **concrete code refactor suggestions**. You only need one provider; the first one with a key wins.
+
+**Ways to pass the API key:** (1) Put `GEMINI_API_KEY=your_key` (or `OPENAI_API_KEY`, etc.) in a **`.env` file** in the directory you run the command from (current working directory). (2) **Export** in the same shell: `export GEMINI_API_KEY=your_key`. (3) **CLI flag**: `--llm-key your_key`. You can also set **model** via `--llm-model gemini-1.5-flash` (or another model name).
 
 | Provider | Env var(s) | Optional env |
 |----------|------------|---------------|
