@@ -4,7 +4,7 @@ Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional
 
 ![Node 18+](https://img.shields.io/badge/node-%3E%3D18-brightgreen?style=flat-square)
 ![Languages](https://img.shields.io/badge/languages-JS%20%7C%20TS%20%7C%20Python-green?style=flat-square)
-![License](https://img.shields.io/badge/license-CC%20BY--NC%204.0-blue?style=flat-square)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)
 
 ---
 
@@ -122,13 +122,12 @@ Use `--no-llm` to run with no API calls.
 ## Contributing
 
 We’d love **issues** and **contributions**.
+Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** before sending a pull request.
 
 - **Bugs or confusing behavior?** Open an issue and describe what you ran and what you expected.
 - **Feature ideas?** Open an issue with a short use case; we’re happy to discuss.
 - **Want to add a language?** Implement the `IAnalyzer` interface in `src/analyzers/` (see `javascript.ts` / `python.ts`), register it in `src/analyzers/index.ts`, and add the right file extensions in `src/discover.ts`. PRs welcome.
-- **Docs or README improvements?** PRs welcome.
-
-By contributing, you agree that your contributions may be used under this project's license (CC BY-NC 4.0).
+- **Code or docs?** Open a PR. You must agree to our **[Contributor License Agreement (CLA)](CLA.md)** before we can merge; the PR template includes a checkbox for this.
 
 ---
 
@@ -151,7 +150,12 @@ src/
 
 ## License
 
-This project is licensed under **CC BY-NC 4.0** (Creative Commons Attribution-NonCommercial 4.0). You may use, share, and adapt it for **non-commercial** purposes with attribution. **Commercial use is not permitted** without separate permission. See [LICENSE](LICENSE) for details.
+**Dual licensing.**
+
+- **GPL-3.0 (open source):** You may use, modify, and distribute this software under the [GNU General Public License v3](https://www.gnu.org/licenses/gpl-3.0.html). You must comply with the GPL (e.g., disclose source for derivatives, same license).
+- **Commercial license:** If you need to use this in proprietary or commercial software without GPL obligations, a separate commercial license is available from the copyright holder. Contact the copyright holder for terms.
+
+See [LICENSE](LICENSE) for the GPL-3.0 text and dual-licensing note.
 
 ---
 
