@@ -21,7 +21,7 @@
     "visualization"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "CC-BY-NC-4.0",
   "engines": {
     "node": ">=18"
   },

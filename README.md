@@ -4,7 +4,7 @@ Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional
 
 ![Node 18+](https://img.shields.io/badge/node-%3E%3D18-brightgreen?style=flat-square)
 ![Languages](https://img.shields.io/badge/languages-JS%20%7C%20TS%20%7C%20Python-green?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
+![License](https://img.shields.io/badge/license-CC%20BY--NC%204.0-blue?style=flat-square)
 
 ---
 
@@ -128,7 +128,7 @@ We’d love **issues** and **contributions**.
 - **Want to add a language?** Implement the `IAnalyzer` interface in `src/analyzers/` (see `javascript.ts` / `python.ts`), register it in `src/analyzers/index.ts`, and add the right file extensions in `src/discover.ts`. PRs welcome.
 - **Docs or README improvements?** PRs welcome.
 
-No formal CLA—by contributing you’re agreeing your contributions are under the project’s MIT license.
+By contributing, you agree that your contributions may be used under this project's license (CC BY-NC 4.0).
 
 ---
 
@@ -151,7 +151,7 @@ src/
 
 ## License
 
-MIT
+This project is licensed under **CC BY-NC 4.0** (Creative Commons Attribution-NonCommercial 4.0). You may use, share, and adapt it for **non-commercial** purposes with attribution. **Commercial use is not permitted** without separate permission. See [LICENSE](LICENSE) for details.
 
 ---
 
