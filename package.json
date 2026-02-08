@@ -1,6 +1,6 @@
 {
   "name": "tech-debt-visualizer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Language-agnostic CLI that analyzes repos and generates interactive technical debt visualizations with AI-powered insights",
   "type": "module",
   "main": "dist/index.js",
@@ -30,6 +30,7 @@
     "README.md"
   ],
   "dependencies": {
+    "dotenv": "^16.4.5",
     "chalk": "^5.3.0",
     "cli-progress": "^3.12.0",
     "commander": "^12.1.0",

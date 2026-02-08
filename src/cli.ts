@@ -3,6 +3,7 @@
  * CLI entry: colorful terminal output, progress bars, actionable insights.
  */
 
+import "dotenv/config";
 import { Command } from "commander";
 import chalk from "chalk";
 import cliProgress from "cli-progress";
@@ -14,6 +15,7 @@ import {
   assessFileCleanliness,
   assessOverallCleanliness,
   enrichDebtWithInsights,
+  resolveLLMConfig,
   suggestNextSteps,
 } from "./llm.js";
 import { generateHtmlReport } from "./reports/html.js";
@@ -74,38 +76,49 @@ program
       }
 
       if (useLlm) {
-        progress.update(3, { task: "LLM: per-file cleanliness..." });
-        const allFilePaths = run.fileMetrics.map((m) => m.file);
-        const maxFiles = 80;
-        const filesToAssess = run.fileMetrics.slice(0, maxFiles);
-        for (const m of filesToAssess) {
-          const content = fileContents.get(m.file);
-          if (!content) continue;
-          const result = await assessFileCleanliness(m.file, content, m, {}, { filePaths: allFilePaths });
-          if (result) {
-            const idx = run.fileMetrics.findIndex((x) => x.file === m.file);
-            if (idx >= 0)
-              run.fileMetrics[idx] = {
-                ...run.fileMetrics[idx]!,
-                llmAssessment: result.assessment,
-                llmSuggestedCode: result.suggestedCode,
-              };
+        const llmConfig = resolveLLMConfig();
+        if (!llmConfig) {
+          process.stderr.write(
+            chalk.yellow(
+              "  No LLM API key found. Set one of: GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY.\n" +
+                "  Example: export GEMINI_API_KEY=your_key_here\n" +
+                "  Skipping AI insights for this run.\n\n"
+            )
+          );
+        } else {
+          progress.update(3, { task: "LLM: per-file cleanliness..." });
+          const allFilePaths = run.fileMetrics.map((m) => m.file);
+          const maxFiles = 80;
+          const filesToAssess = run.fileMetrics.slice(0, maxFiles);
+          for (const m of filesToAssess) {
+            const content = fileContents.get(m.file);
+            if (!content) continue;
+            const result = await assessFileCleanliness(m.file, content, m, {}, { filePaths: allFilePaths });
+            if (result) {
+              const idx = run.fileMetrics.findIndex((x) => x.file === m.file);
+              if (idx >= 0)
+                run.fileMetrics[idx] = {
+                  ...run.fileMetrics[idx]!,
+                  llmAssessment: result.assessment,
+                  llmSuggestedCode: result.suggestedCode,
+                };
+            }
           }
-        }
 
-        progress.update(4, { task: "LLM: debt item insights..." });
-        let debtItems = run.debtItems;
-        if (debtItems.length > 0) {
-          debtItems = await enrichDebtWithInsights(debtItems.slice(0, 25), fileContents);
-          const byId = new Map(debtItems.map((d) => [d.id, d]));
-          run.debtItems = run.debtItems.map((d) => byId.get(d.id) ?? d);
-        }
+          progress.update(4, { task: "LLM: debt item insights..." });
+          let debtItems = run.debtItems;
+          if (debtItems.length > 0) {
+            debtItems = await enrichDebtWithInsights(debtItems.slice(0, 25), fileContents);
+            const byId = new Map(debtItems.map((d) => [d.id, d]));
+            run.debtItems = run.debtItems.map((d) => byId.get(d.id) ?? d);
+          }
 
-        progress.update(5, { task: "LLM: overall assessment..." });
-        const overall = await assessOverallCleanliness(run);
-        if (overall) run.llmOverallAssessment = overall;
-        const nextSteps = await suggestNextSteps(run);
-        if (nextSteps?.length) run.llmNextSteps = nextSteps;
+          progress.update(5, { task: "LLM: overall assessment..." });
+          const overall = await assessOverallCleanliness(run);
+          if (overall) run.llmOverallAssessment = overall;
+          const nextSteps = await suggestNextSteps(run);
+          if (nextSteps?.length) run.llmNextSteps = nextSteps;
+        }
       }
 
       progress.update(totalSteps, { task: "Done" });
