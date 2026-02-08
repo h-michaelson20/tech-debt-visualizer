@@ -1,0 +1,47 @@
+{
+  "name": "tech-debt-visualizer",
+  "version": "0.1.0",
+  "description": "Language-agnostic CLI that analyzes repos and generates interactive technical debt visualizations with AI-powered insights",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "tech-debt": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "analyze": "node dist/cli.js analyze",
+    "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "technical-debt",
+    "code-quality",
+    "static-analysis",
+    "visualization"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "cli-progress": "^3.12.0",
+    "commander": "^12.1.0",
+    "simple-git": "^3.27.0",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-javascript": "^0.21.0",
+    "tree-sitter-typescript": "^0.21.0",
+    "tree-sitter-python": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
