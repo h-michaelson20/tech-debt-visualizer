@@ -14,6 +14,7 @@ import {
   assessFileCleanliness,
   assessOverallCleanliness,
   enrichDebtWithInsights,
+  suggestNextSteps,
 } from "./llm.js";
 import { generateHtmlReport } from "./reports/html.js";
 import { generateJsonReport } from "./reports/json.js";
@@ -74,13 +75,13 @@ program
 
       if (useLlm) {
         progress.update(3, { task: "LLM: per-file cleanliness..." });
-        const filesToAssess = run.fileMetrics
-          .sort((a, b) => (b.hotspotScore ?? 0) - (a.hotspotScore ?? 0))
-          .slice(0, 15);
+        const allFilePaths = run.fileMetrics.map((m) => m.file);
+        const maxFiles = 80;
+        const filesToAssess = run.fileMetrics.slice(0, maxFiles);
         for (const m of filesToAssess) {
           const content = fileContents.get(m.file);
           if (!content) continue;
-          const result = await assessFileCleanliness(m.file, content, m);
+          const result = await assessFileCleanliness(m.file, content, m, {}, { filePaths: allFilePaths });
           if (result) {
             const idx = run.fileMetrics.findIndex((x) => x.file === m.file);
             if (idx >= 0)
@@ -103,6 +104,8 @@ program
         progress.update(5, { task: "LLM: overall assessment..." });
         const overall = await assessOverallCleanliness(run);
         if (overall) run.llmOverallAssessment = overall;
+        const nextSteps = await suggestNextSteps(run);
+        if (nextSteps?.length) run.llmNextSteps = nextSteps;
       }
 
       progress.update(totalSteps, { task: "Done" });
@@ -133,6 +136,14 @@ program
         }
       } else {
         printCliReport(run, opts.ci ?? false);
+        if (!run.llmOverallAssessment) {
+          process.stdout.write(
+            chalk.dim(
+              "  To get AI insights, per-file optimization suggestions, and refactor recommendations:\n" +
+                "  set GEMINI_API_KEY or OPENAI_API_KEY and run without --no-llm.\n\n"
+            )
+          );
+        }
         if (opts.ci && getDebtScore(run) > 60) process.exit(1);
       }
     } catch (e) {
@@ -170,7 +181,8 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
   if (run.debtTrend && run.debtTrend.length > 0) {
     process.stdout.write(`  Recent commits: ${chalk.cyan(String(run.debtTrend.length))}\n`);
   }
-  process.stdout.write(`  Debt score:     ${severityColor(score)} / 100\n\n`);
+  process.stdout.write(`  Debt score:     ${severityColor(score)} / 100\n`);
+  process.stdout.write(chalk.dim("  (weighted average of debt item severity × confidence, 0–100)\n\n"));
 
   const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const d of debtItems) {
@@ -223,6 +235,30 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     for (const e of errors.slice(0, 5)) {
       process.stdout.write(chalk.dim(`  ${e.file}: ${e.message}\n`));
     }
+    process.stdout.write("\n");
+  }
+
+  process.stdout.write(chalk.bold("  What to fix\n"));
+  process.stdout.write(chalk.dim("  " + "—".repeat(50) + "\n"));
+  const severityLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const fixList = debtItems
+    .sort((a, b) => severityOrder(b.severity) - severityOrder(a.severity))
+    .slice(0, 12)
+    .map((d) => `  • [${severityLabel(d.severity)}] ${d.title} — ${d.file}${d.line != null ? `:${d.line}` : ""}`);
+  if (fixList.length > 0) {
+    fixList.forEach((line) => process.stdout.write(line + "\n"));
+  } else {
+    process.stdout.write(chalk.dim("  No debt items. Keep it up.\n"));
+  }
+  process.stdout.write("\n");
+
+  if (run.llmNextSteps && run.llmNextSteps.length > 0) {
+    process.stdout.write(chalk.bold.cyan("  Recommended next steps (AI)\n"));
+    process.stdout.write(chalk.dim("  " + "—".repeat(50) + "\n"));
+    for (const step of run.llmNextSteps) {
+      process.stdout.write(chalk.cyan("  • ") + step + "\n");
+    }
+    process.stdout.write("\n");
   }
 
   process.stdout.write(chalk.dim("  Run with --format html -o report.html for the interactive dashboard.\n\n"));

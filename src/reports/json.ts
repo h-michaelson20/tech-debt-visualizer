@@ -16,6 +16,7 @@ export function generateJsonReport(run: AnalysisRun): string {
     debtTrend: run.debtTrend,
     errors: run.errors,
     llmOverallAssessment: run.llmOverallAssessment ?? undefined,
+    llmNextSteps: run.llmNextSteps ?? undefined,
   };
   return JSON.stringify(payload, null, 2);
 }

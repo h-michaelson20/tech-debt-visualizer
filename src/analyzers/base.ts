@@ -46,6 +46,18 @@ export function effectiveLines(source: string): number {
     }).length;
 }
 
+const TODO_FIXME_RE = /\b(TODO|FIXME|HACK|XXX)\b/i;
+
+/** Find TODO/FIXME/HACK/XXX markers (e.g. in comments). Returns 1-based line numbers and tag. */
+export function findTodoFixmeHack(source: string): { line: number; tag: string }[] {
+  const out: { line: number; tag: string }[] = [];
+  source.split("\n").forEach((line, i) => {
+    const m = line.match(TODO_FIXME_RE);
+    if (m) out.push({ line: i + 1, tag: m[1]!.toUpperCase() });
+  });
+  return out;
+}
+
 export function createDebtItem(
   file: string,
   category: DebtCategory,
@@ -74,9 +86,13 @@ export function createDebtItem(
   };
 }
 
+/** Cyclomatic complexity → severity: low 15–24, medium 25–39, high 40–59, critical ≥ 60. */
+export const CYCLOMATIC_THRESHOLDS = { low: 15, medium: 25, high: 40, critical: 60 } as const;
+
 export function inferSeverity(complexity: number): Severity {
-  if (complexity >= 20) return "critical";
-  if (complexity >= 10) return "high";
-  if (complexity >= 5) return "medium";
+  if (complexity >= CYCLOMATIC_THRESHOLDS.critical) return "critical";
+  if (complexity >= CYCLOMATIC_THRESHOLDS.high) return "high";
+  if (complexity >= CYCLOMATIC_THRESHOLDS.medium) return "medium";
+  if (complexity >= CYCLOMATIC_THRESHOLDS.low) return "low";
   return "low";
 }

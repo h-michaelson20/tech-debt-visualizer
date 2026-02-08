@@ -1,11 +1,11 @@
 {
   "name": "tech-debt-visualizer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Language-agnostic CLI that analyzes repos and generates interactive technical debt visualizations with AI-powered insights",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "tech-debt": "./dist/cli.js"
+    "tech-debt": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",

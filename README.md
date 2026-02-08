@@ -35,7 +35,7 @@ The tool runs a fixed pipeline so you know exactly what you’re getting.
    Pluggable analyzers (today: JavaScript/TypeScript and Python) parse each file with **tree-sitter**, then:
    - Count **cyclomatic complexity** (if/else, loops, switch, ternaries, `&&`/`||`).
    - Count effective lines and check for **module-level docs** (JSDoc, docstrings).
-   - Emit **debt items** (e.g. “High cyclomatic complexity”, “Missing documentation”, “Large file”) with severity and confidence.
+   - Emit **debt items** (e.g. “High cyclomatic complexity”, “Missing documentation”, “Large file”, “TODO/FIXME/HACK/XXX markers”) with severity and confidence.
 
 3. **Enrich with git**  
    Uses `git log` (e.g. last 90 days) to compute per-file **churn** and **commit count**. Combines that with complexity into a **hotspot score**: files that change often and are complex are treated as higher risk. A simple **debt trend** over recent commits is also derived (heuristic, not full historical analysis).
@@ -43,11 +43,13 @@ The tool runs a fixed pipeline so you know exactly what you’re getting.
 4. **Score and tier**  
    A single **debt score** (0–100) is computed from severity and confidence of all debt items. That score is mapped to a **Cleanliness tier** (1–5), e.g. “Thoughtful Prompter (3/5)” or “Pure Coder (5/5)”, shown at the top of the CLI and report.
 
+   **How the score is calculated:** Each debt item has a severity (low=1, medium=2, high=3, critical=4) and a confidence (0–1). The score is the weighted average of (severity × confidence) across all items, scaled by 25 and capped at 100: more or worse items → higher score (worse cleanliness).
+
 5. **Optional LLM pass**  
    If an API key is set and you don’t use `--no-llm`, the tool:
-   - Asks the LLM to assess **per-file cleanliness** for the top ~15 hotspot files (and optionally suggest a **concrete code refactor** in a code block).
+   - Asks the LLM to assess **per-file cleanliness** for each analyzed file (up to 80) with repo context for cross-file suggestions (and optionally suggest a **concrete code refactor** in a code block).
    - Asks the LLM to explain **each debt item** (why it matters, what to do) and optionally suggest a **simplified/refactored code snippet**.
-   - Asks the LLM for one **overall codebase assessment** (a short paragraph).
+   - Asks the LLM for one **overall codebase assessment** (a short paragraph) and optional **prioritized next steps** (3–5 bullets).
 
    Responses are parsed: prose goes into insights/assessments; any markdown code block is stored as **suggested refactor** and shown in CLI and HTML.
 
@@ -147,6 +149,10 @@ src/
 ```
 
 ---
+
+## Publishing (maintainers)
+
+To publish this package to npm: see **[docs/PUBLISHING.md](docs/PUBLISHING.md)** for step-by-step instructions (login, build, publish, scoped name if needed).
 
 ## License
 

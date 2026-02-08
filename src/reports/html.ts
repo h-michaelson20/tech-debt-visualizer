@@ -34,6 +34,7 @@ function buildHtml(run: AnalysisRun, title: string, darkMode: boolean): string {
     debtItems: run.debtItems,
     debtTrend: run.debtTrend ?? [],
     llmOverallAssessment: run.llmOverallAssessment ?? null,
+    llmNextSteps: run.llmNextSteps ?? null,
     summary: {
       filesAnalyzed: run.fileMetrics.length,
       debtCount: run.debtItems.length,
@@ -272,6 +273,14 @@ function buildHtml(run: AnalysisRun, title: string, darkMode: boolean): string {
     <div class="section llm-overall">
       <h2>LLM overall assessment</h2>
       <p class="llm-overall-text">${escapeHtml(run.llmOverallAssessment)}</p>
+    </div>
+    ` : ""}
+    ${run.llmNextSteps?.length ? `
+    <div class="section llm-next-steps">
+      <h2>Recommended next steps (AI)</h2>
+      <ul>
+        ${run.llmNextSteps.map((s) => `<li>${escapeHtml(s)}</li>`).join("\n        ")}
+      </ul>
     </div>
     ` : ""}
 

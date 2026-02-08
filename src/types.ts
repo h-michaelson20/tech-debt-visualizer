@@ -94,6 +94,8 @@ export interface AnalysisRun {
   errors: Array<{ file: string; message: string }>;
   /** LLM-generated overall codebase cleanliness assessment (when LLM attached) */
   llmOverallAssessment?: string;
+  /** LLM-generated prioritized next steps (when LLM attached) */
+  llmNextSteps?: string[];
 }
 
 /** Pluggable analyzer: given file paths and content, returns metrics + debt items */

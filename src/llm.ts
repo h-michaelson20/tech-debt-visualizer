@@ -222,22 +222,36 @@ Reply format: Short explanation first, then optionally a code block with the sug
   return { insight: prose || item.description, suggestedCode: code };
 }
 
-/** Per-file: LLM assesses cleanliness and optionally suggests a concrete code simplification. */
+/** Context about the rest of the repo for cross-file optimization suggestions. */
+export interface RepoContext {
+  /** All analyzed file paths in this run (including the current file). */
+  filePaths: string[];
+}
+
+/** Per-file: LLM assesses cleanliness and suggests optimizations with cross-file context. */
 export async function assessFileCleanliness(
   filePath: string,
   content: string,
   metrics: FileMetrics,
-  config: LLMConfig = {}
+  config: LLMConfig = {},
+  repoContext?: RepoContext
 ): Promise<{ assessment: string; suggestedCode?: string } | null> {
   const resolved = resolveLLMConfig(config);
   if (!resolved) return null;
 
   const snippet = content.length > 4000 ? content.slice(0, 4000) + "\n\n[... truncated]" : content;
-  const prompt = `You are a senior engineer assessing code cleanliness. For this file:
+  const otherFiles =
+    repoContext?.filePaths?.filter((p) => p !== filePath).slice(0, 80) ?? [];
+  const repoContextBlock =
+    otherFiles.length > 0
+      ? `\nRepository context (other files in this run): ${otherFiles.join(", ")}.\nWhen suggesting optimizations, you may reference other files (e.g. extract to a shared module, reuse from another file, or move code between files). Explain why each suggestion helps.\n`
+      : "";
 
-1) In 1-2 sentences: how clean and maintainable is it, and one concrete improvement (or "Looks good" if fine).
-2) If one specific code simplification or streamlining is possible (e.g. simplify a function, reduce nesting, extract a helper), provide ONLY that refactored snippet in a markdown code block. Same language as the file. If no clear code change applies, omit the code block.
+  const prompt = `You are a senior engineer assessing code cleanliness and possible optimizations for this file.
 
+1) In 1-3 sentences: how clean and maintainable is it, and one or two concrete improvements (or "Looks good" if fine). Explain why each improvement matters.
+2) If one specific optimization is possible (e.g. simplify a function, reduce nesting, extract a helper, or a cross-file refactor like moving code to a shared module), provide ONLY that refactored snippet in a markdown code block. Same language as the file. Briefly say why it helps. If no clear code change applies, omit the code block.
+${repoContextBlock}
 File: ${filePath}
 Metrics: complexity ${metrics.cyclomaticComplexity ?? "?"}, lines ${metrics.lineCount}, ${metrics.hasDocumentation ? "has docs" : "no module docs"}${metrics.hotspotScore != null ? `, hotspot ${metrics.hotspotScore.toFixed(2)}` : ""}.
 
@@ -246,11 +260,11 @@ Code:
 ${snippet}
 \`\`\`
 
-Reply: short assessment first, then optionally a code block with the suggested refactor. No preamble.`;
+Reply: short assessment first (with brief "why"), then optionally a code block with the suggested refactor. No preamble.`;
 
   const raw = await chat(prompt, {
     ...resolved,
-    maxTokens: config.maxTokens ?? 400,
+    maxTokens: config.maxTokens ?? 500,
   });
   if (!raw) return null;
   const { prose, code } = parseCodeBlockAndProse(raw);
@@ -288,4 +302,47 @@ In one short paragraph (3-5 sentences), assess overall cleanliness: main strengt
     ...resolved,
     maxTokens: config.maxTokens ?? DEFAULT_MAX_TOKENS_OVERALL,
   });
+}
+
+/** LLM suggests 3–5 prioritized next steps (actionable bullets). */
+export async function suggestNextSteps(
+  run: AnalysisRun,
+  config: LLMConfig = {}
+): Promise<string[] | null> {
+  const resolved = resolveLLMConfig(config);
+  if (!resolved) return null;
+
+  const fileCount = run.fileMetrics.length;
+  const debtCount = run.debtItems.length;
+  const bySeverity = run.debtItems.reduce(
+    (acc, d) => {
+      acc[d.severity] = (acc[d.severity] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+  const severityOrd = (s: string) => ({ critical: 4, high: 3, medium: 2, low: 1 }[s] ?? 0);
+  const topItems = run.debtItems
+    .sort((a, b) => severityOrd(b.severity) - severityOrd(a.severity))
+    .slice(0, 15)
+    .map((d) => `${d.severity}: ${d.title} (${d.file}${d.line ? `:${d.line}` : ""})`);
+
+  const prompt = `You are a senior engineer. Given this technical debt summary, suggest 3–5 concrete, prioritized next steps the team should take to reduce debt. Be specific (files, types of fixes). Output ONLY a short bullet list: one action per line, starting each line with "- " or "• ". No preamble or explanation.
+
+Summary: ${fileCount} files, ${debtCount} debt items. By severity: ${JSON.stringify(bySeverity)}.
+Sample items: ${topItems.join("; ")}
+
+List 3–5 next steps:`;
+
+  const raw = await chat(prompt, {
+    ...resolved,
+    maxTokens: 300,
+  });
+  if (!raw) return null;
+  const bullets = raw
+    .split(/\n/)
+    .map((s) => s.replace(/^[\s\-•*]+\s*/, "").trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 5);
+  return bullets.length > 0 ? bullets : null;
 }

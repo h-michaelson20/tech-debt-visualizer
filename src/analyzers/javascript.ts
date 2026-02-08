@@ -11,6 +11,7 @@ import {
   countComplexity,
   createDebtItem,
   effectiveLines,
+  findTodoFixmeHack,
   inferSeverity,
 } from "./base.js";
 
@@ -75,7 +76,7 @@ export const javascriptAnalyzer = {
         };
         metrics.push(fileMetric);
 
-        if (complexity >= 5) {
+        if (complexity >= 15) {
           debtItems.push(
             createDebtItem(
               path,
@@ -115,6 +116,27 @@ export const javascriptAnalyzer = {
               "Missing module-level documentation",
               "No JSDoc or file-level comment found. Document purpose and usage for maintainability.",
               { confidence: 0.7 }
+            )
+          );
+        }
+
+        const todoMarkers = findTodoFixmeHack(content);
+        if (todoMarkers.length > 0) {
+          const severity =
+            todoMarkers.length >= 6 ? "high" : todoMarkers.length >= 3 ? "medium" : "low";
+          const first = todoMarkers[0]!;
+          debtItems.push(
+            createDebtItem(
+              path,
+              "other",
+              `${todoMarkers.length} TODO/FIXME/HACK/XXX marker(s)`,
+              `Address or track these in issues: ${todoMarkers.map((m) => `${m.tag} L${m.line}`).join(", ")}.`,
+              {
+                line: first.line,
+                severity,
+                confidence: 0.75,
+                metrics: { count: todoMarkers.length },
+              }
             )
           );
         }
