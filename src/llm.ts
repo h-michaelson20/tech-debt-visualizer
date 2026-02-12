@@ -93,19 +93,25 @@ function parseFileAssessmentResponse(raw: string): {
   };
 }
 
-/** Resolve provider and auth from config + env. When --llm-key is used, provider is inferred from key format so a Gemini key is not sent to OpenRouter. */
+/** Resolve provider and auth from config + env. Explicit baseURL = OpenAI-compatible; else key format or env picks provider. */
 export function resolveLLMConfig(config: LLMConfig = {}): {
   provider: LLMProvider;
   apiKey: string;
   baseURL: string;
   model: string;
 } | null {
+  const explicitBase = (config.baseURL ?? process.env.OPENAI_BASE_URL)?.replace(/\/$/, "");
   const cliKey = config.apiKey;
-  const openRouterKey = cliKey ?? process.env.OPENROUTER_API_KEY;
-  const geminiKey = cliKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY;
   const openaiKey = cliKey ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY;
 
-  // When a single key is passed (e.g. --llm-key), pick provider by key format so we don't send a Gemini key to OpenRouter (401 "No cookie auth").
+  if (explicitBase && openaiKey) {
+    return {
+      provider: "openai",
+      apiKey: openaiKey,
+      baseURL: explicitBase,
+      model: config.model ?? process.env.OPENAI_MODEL ?? OPENAI_DEFAULT_MODEL,
+    };
+  }
   if (cliKey) {
     if (cliKey.startsWith("AIza")) {
       return {
@@ -119,24 +125,26 @@ export function resolveLLMConfig(config: LLMConfig = {}): {
       return {
         provider: "openai",
         apiKey: cliKey,
-        baseURL: config.baseURL ?? process.env.OPENAI_BASE_URL ?? "",
+        baseURL: (config.baseURL ?? process.env.OPENAI_BASE_URL ?? "").replace(/\/$/, ""),
         model: config.model ?? process.env.OPENAI_MODEL ?? OPENAI_DEFAULT_MODEL,
       };
     }
   }
 
-  if (openRouterKey) {
+  if (cliKey ?? process.env.OPENROUTER_API_KEY) {
+    const key = cliKey ?? process.env.OPENROUTER_API_KEY!;
     return {
       provider: "openrouter",
-      apiKey: openRouterKey,
+      apiKey: key,
       baseURL: config.baseURL ?? process.env.OPENROUTER_BASE_URL ?? OPENROUTER_BASE,
       model: config.model ?? process.env.OPENROUTER_MODEL ?? OPENROUTER_DEFAULT_MODEL,
     };
   }
-  if (geminiKey) {
+  if (cliKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY) {
+    const key = cliKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY!;
     return {
       provider: "gemini",
-      apiKey: geminiKey,
+      apiKey: key,
       baseURL: GEMINI_BASE,
       model: config.model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL,
     };
@@ -145,7 +153,7 @@ export function resolveLLMConfig(config: LLMConfig = {}): {
     return {
       provider: "openai",
       apiKey: openaiKey,
-      baseURL: config.baseURL ?? process.env.OPENAI_BASE_URL ?? "",
+      baseURL: (config.baseURL ?? process.env.OPENAI_BASE_URL ?? "").replace(/\/$/, ""),
       model: config.model ?? process.env.OPENAI_MODEL ?? OPENAI_DEFAULT_MODEL,
     };
   }

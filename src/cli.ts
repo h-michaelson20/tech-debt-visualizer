@@ -37,17 +37,19 @@ program
   .option("-f, --format <type>", "Output format: cli | html | json | markdown", "cli")
   .option("--no-llm", "Skip LLM-powered insights")
   .option("--llm", "Enable LLM (default). Use with --llm-key and/or --llm-model")
-  .option("--llm-key <key>", "API key for LLM (overrides GEMINI_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY)")
-  .option("--llm-model <model>", "Model name (e.g. gemini-1.5-flash, gpt-4o-mini)")
-  .option("--llm-max-tokens <n>", "Max tokens for LLM responses (default: 2048 for overall, 1024 per-file)", (v) => parseInt(v, 10))
+  .option("--llm-key <key>", "API key (overrides env: GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY)")
+  .option("--llm-endpoint <url>", "OpenAI-compatible API base URL (e.g. https://api.openai.com/v1 or proxy)")
+  .option("--llm-model <model>", "Model name (e.g. gpt-4o-mini, gemini-2.5-flash)")
+  .option("--llm-max-tokens <n>", "Max tokens per response", (v) => parseInt(v, 10))
   .option("--ci", "CI mode: minimal output, exit with non-zero if debt score is high")
-  .action(async (path: string, opts: { output?: string; format?: string; llm?: boolean; ci?: boolean; llmKey?: string; llmModel?: string; llmMaxTokens?: number }) => {
+  .action(async (path: string, opts: { output?: string; format?: string; llm?: boolean; ci?: boolean; llmKey?: string; llmEndpoint?: string; llmModel?: string; llmMaxTokens?: number }) => {
     const repoPath = join(process.cwd(), path);
     const format = (opts.format ?? "cli") as "cli" | "html" | "json" | "markdown";
     const useLlm = opts.llm !== false;
     const outputPath = opts.output ?? (format === "html" ? "tech-debt-report.html" : undefined);
     const llmConfigOverrides = {
       apiKey: opts.llmKey,
+      baseURL: opts.llmEndpoint,
       model: opts.llmModel,
       ...(opts.llmMaxTokens != null && opts.llmMaxTokens > 0 ? { maxTokens: opts.llmMaxTokens } : {}),
     };
@@ -100,9 +102,9 @@ program
           progress.stop();
           process.stderr.write(
             chalk.yellow(
-              "  No LLM API key found. Set GEMINI_API_KEY or OPENAI_API_KEY (or use --llm-key <key>).\n" +
-                "  Example: export GEMINI_API_KEY=your_key   or   --llm-key your_key\n" +
-                "  Or add GEMINI_API_KEY=your_key to a .env file in the current directory.\n" +
+              "  No LLM API key found. Use --llm-key <key> or set one of:\n" +
+                "  GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY (or .env).\n" +
+                "  For a custom endpoint: --llm-endpoint <url> --llm-key <key>\n" +
                 "  Skipping AI insights for this run.\n\n"
             )
           );
