@@ -1,14 +1,12 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getCleanlinessTier } from "../cleanliness-score.js";
-import type { AnalysisRun, DebtItem, FileMetrics } from "../types.js";
+import { getDebtScore } from "../debt-score.js";
+import type { AnalysisRun } from "../types.js";
 
-function getDebtScore(run: AnalysisRun): number {
-  const items = run.debtItems;
-  if (items.length === 0) return 0;
-  const severityWeight = { low: 1, medium: 2, high: 3, critical: 4 };
-  const sum = items.reduce((a, b) => a + (severityWeight[b.severity] ?? 0) * b.confidence, 0);
-  return Math.min(100, Math.round((sum / items.length) * 25));
-}
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ASSETS_DIR = join(__dirname, "assets");
 
 export interface HtmlReportOptions {
   outputPath: string;
@@ -21,20 +19,63 @@ export async function generateHtmlReport(
   options: HtmlReportOptions
 ): Promise<void> {
   const { outputPath, title = "Technical Debt Report", darkMode = true } = options;
-  const html = buildHtml(run, title, darkMode);
+  const [css, script] = await Promise.all([
+    readFile(join(ASSETS_DIR, "report.css"), "utf-8"),
+    readFile(join(ASSETS_DIR, "report.js"), "utf-8"),
+  ]);
+  const html = buildHtml(run, title, darkMode, css, script);
   await writeFile(outputPath, html, "utf-8");
 }
 
-function buildHtml(run: AnalysisRun, title: string, darkMode: boolean): string {
+/** Inline SVG badge: shield shape with tier number and "of 5". */
+function buildScoreBadgeSvg(tier: number, fillColor: string): string {
+  const lighter = adjustHexBrightness(fillColor, 1.3);
+  const shadowId = "badge-shadow-" + tier;
+  const gradientId = "badge-shine-" + tier;
+  return `<svg class="score-badge-svg" viewBox="0 0 140 168" xmlns="http://www.w3.org/2000/svg" role="img">
+  <defs>
+    <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:${lighter};stop-opacity:0.5" />
+      <stop offset="100%" style="stop-color:${fillColor};stop-opacity:1" />
+    </linearGradient>
+    <filter id="${shadowId}" x="-30%" y="-20%" width="160%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <path fill="url(#${gradientId})" filter="url(#${shadowId})" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
+  <path fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2.5" stroke-linejoin="round" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
+  <text x="70" y="78" text-anchor="middle" class="score-badge-num" fill="white">${tier}</text>
+  <text x="70" y="100" text-anchor="middle" class="score-badge-of" fill="white">of 5</text>
+</svg>`;
+}
+
+function adjustHexBrightness(hex: string, factor: number): string {
+  const m = hex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return hex;
+  const r = Math.min(255, Math.round(parseInt(m[1]!, 16) * factor));
+  const g = Math.min(255, Math.round(parseInt(m[2]!, 16) * factor));
+  const b = Math.min(255, Math.round(parseInt(m[3]!, 16) * factor));
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
+function buildHtml(
+  run: AnalysisRun,
+  title: string,
+  darkMode: boolean,
+  css: string,
+  script: string
+): string {
   const theme = darkMode ? "dark" : "light";
   const debtScore = getDebtScore(run);
   const cleanliness = getCleanlinessTier(debtScore);
+  const hasLlm = !!(run.llmOverallAssessment || run.llmOverallRaw);
   const dataJson = JSON.stringify({
     fileMetrics: run.fileMetrics,
     debtItems: run.debtItems,
-    debtTrend: run.debtTrend ?? [],
+    hasLlm,
     llmOverallAssessment: run.llmOverallAssessment ?? null,
-    llmNextSteps: run.llmNextSteps ?? null,
+    llmOverallRaw: run.llmOverallRaw ?? null,
+    llmOverallSeverity: run.llmOverallSeverity ?? null,
     summary: {
       filesAnalyzed: run.fileMetrics.length,
       debtCount: run.debtItems.length,
@@ -47,262 +88,74 @@ function buildHtml(run: AnalysisRun, title: string, darkMode: boolean): string {
     },
   });
 
+  const highCriticalCount = run.debtItems.filter(
+    (d) => d.severity === "high" || d.severity === "critical"
+  ).length;
+  const hotspotCount = run.fileMetrics.filter((m) => (m.hotspotScore ?? 0) > 0.3).length;
+
+  const tierColors: Record<number, string> = {
+    1: "#c00",
+    2: "#e85d00",
+    3: "#b8860b",
+    4: "#069",
+    5: "#0a6b0a",
+  };
+  const tierColor = tierColors[cleanliness.tier] ?? "#666";
+  const scoreBadgeSvg = buildScoreBadgeSvg(cleanliness.tier, tierColor);
+
+  const llmOverallSection =
+    run.llmOverallAssessment || run.llmOverallRaw
+      ? `
+    <div class="section llm-overall">
+      <h2>LLM overall assessment</h2>
+      <div class="llm-output">${
+        run.llmOverallAssessment
+          ? renderLlmOutputToHtml(run.llmOverallAssessment)
+          : '<div class="llm-prose">' +
+            escapeHtml(stripTrailingSeverityAndScore(run.llmOverallRaw ?? "")).replace(/\n/g, "<br>") +
+            "</div>"
+      }</div>
+    </div>
+    `
+      : "";
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="${theme}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <style>
-    :root {
-      --bg: #0f0f12;
-      --surface: #1a1a1f;
-      --border: #2a2a32;
-      --text: #e4e4e7;
-      --text-muted: #71717a;
-      --accent: #6366f1;
-      --accent-dim: #4f46e5;
-      --green: #22c55e;
-      --yellow: #eab308;
-      --red: #ef4444;
-      --gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-    }
-    [data-theme="light"] {
-      --bg: #fafafa;
-      --surface: #fff;
-      --border: #e4e4e7;
-      --text: #18181b;
-      --text-muted: #71717a;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      letter-spacing: -0.01em;
-    }
-    .container { max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem; }
-    .hero-caption { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); margin: 0 0 0.75rem; font-weight: 600; }
-    .hero {
-      display: flex;
-      align-items: stretch;
-      gap: 0;
-      margin-bottom: 2.5rem;
-      border-radius: 16px;
-      overflow: hidden;
-      background: var(--surface);
-      border: 1px solid var(--border);
-    }
-    .hero-grade {
-      width: 140px;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem 1.5rem;
-      background: var(--tier-bg);
-      border-right: 1px solid var(--border);
-    }
-    .hero-grade .num { font-size: 3rem; font-weight: 800; line-height: 1; color: var(--tier-fg); letter-spacing: -0.03em; }
-    .hero-grade .of { font-size: 0.75rem; color: var(--tier-fg); opacity: 0.7; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.1em; }
-    .hero-body { flex: 1; padding: 2rem 2.25rem; min-width: 0; }
-    .hero-body .score-label { font-size: 1.35rem; font-weight: 700; color: var(--text); margin: 0 0 0.35rem; letter-spacing: -0.02em; }
-    .hero-body .score-desc { font-size: 0.9rem; color: var(--text-muted); line-height: 1.45; margin: 0; }
-    .hero-body .report-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 1.25rem; }
-    .hero.tier-1 { --tier-bg: #1c1917; --tier-fg: #f87171; }
-    .hero.tier-2 { --tier-bg: #1c1917; --tier-fg: #fb923c; }
-    .hero.tier-3 { --tier-bg: #1c1917; --tier-fg: #facc15; }
-    .hero.tier-4 { --tier-bg: #0f172a; --tier-fg: #38bdf8; }
-    .hero.tier-5 { --tier-bg: #052e16; --tier-fg: #4ade80; }
-    [data-theme="light"] .hero.tier-1 { --tier-bg: #fef2f2; --tier-fg: #dc2626; }
-    [data-theme="light"] .hero.tier-2 { --tier-bg: #fff7ed; --tier-fg: #ea580c; }
-    [data-theme="light"] .hero.tier-3 { --tier-bg: #fefce8; --tier-fg: #ca8a04; }
-    [data-theme="light"] .hero.tier-4 { --tier-bg: #f0f9ff; --tier-fg: #0284c7; }
-    [data-theme="light"] .hero.tier-5 { --tier-bg: #f0fdf4; --tier-fg: #16a34a; }
-    .summary-cards {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1rem;
-      margin-bottom: 2.5rem;
-    }
-    @media (max-width: 640px) { .summary-cards { grid-template-columns: repeat(2, 1fr); } }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem 1.35rem;
-      transition: border-color 0.2s;
-    }
-    .card:hover { border-color: var(--text-muted); }
-    .card .value { font-size: 1.65rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
-    .card .label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.2rem; }
-    .section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
-    }
-    .section h2 { font-size: 1.1rem; margin: 0 0 1rem; color: var(--text-muted); font-weight: 600; }
-    #treemap {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      min-height: 280px;
-    }
-    .treemap-cell {
-      border-radius: 6px;
-      display: flex;
-      align-items: flex-end;
-      padding: 6px 8px;
-      font-size: 0.7rem;
-      cursor: pointer;
-      transition: transform 0.15s, filter 0.15s;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .treemap-cell:hover { transform: scale(1.03); filter: brightness(1.1); }
-    .treemap-cell[data-severity="critical"] { background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%); color: #fff; }
-    .treemap-cell[data-severity="high"]    { background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%); color: #fff; }
-    .treemap-cell[data-severity="medium"]  { background: linear-gradient(180deg, #eab308 0%, #ca8a04 100%); color: #1a1a1f; }
-    .treemap-cell[data-severity="low"]     { background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%); color: #fff; }
-    .treemap-cell[data-severity="none"]    { background: var(--border); color: var(--text-muted); }
-    #trendChart { max-height: 220px; }
-    .debt-list { list-style: none; padding: 0; margin: 0; }
-    .debt-list li {
-      border-bottom: 1px solid var(--border);
-      padding: 0.85rem 0;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .debt-list li:last-child { border-bottom: none; }
-    .debt-list li:hover { background: rgba(99, 102, 241, 0.08); }
-    .debt-list .title { font-weight: 600; margin-bottom: 0.25rem; }
-    .debt-list .meta { font-size: 0.8rem; color: var(--text-muted); }
-    .debt-list .insight { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem; line-height: 1.4; }
-    .badge { display: inline-block; padding: 0.2em 0.5em; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
-    .badge-critical { background: #ef4444; color: #fff; }
-    .badge-high { background: #f59e0b; color: #fff; }
-    .badge-medium { background: #eab308; color: #1a1a1f; }
-    .badge-low { background: #22c55e; color: #fff; }
-    #detail {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      padding: 2rem;
-    }
-    #detail.show { display: flex; }
-    #detail .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      max-width: 520px;
-      width: 100%;
-      max-height: 85vh;
-      overflow: auto;
-      padding: 1.5rem;
-    }
-    #detail .panel h3 { margin: 0 0 0.5rem; }
-    #detail .panel .file { font-family: monospace; font-size: 0.85rem; color: var(--accent); }
-    #detail .panel .explanation { margin-top: 1rem; line-height: 1.5; color: var(--text-muted); }
-    #detail .panel .close-hint { margin-top: 1rem; font-size: 0.75rem; color: var(--text-muted); opacity: 0.8; }
-    #detail .panel .file-assessment { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; }
-    #detail .panel .file-assessment strong { color: var(--text); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-    #detail .panel .suggested-code { margin-top: 1rem; padding: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; overflow-x: auto; }
-    #detail .panel .suggested-code pre { margin: 0; white-space: pre-wrap; }
-    .llm-overall .llm-overall-text { margin: 0; color: var(--text); line-height: 1.6; }
-    .priority-matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
-    .priority-matrix .quadrant { padding: 1rem; border-radius: 8px; border: 1px solid var(--border); }
-    .priority-matrix .quadrant h4 { margin: 0 0 0.5rem; font-size: 0.9rem; }
-    .priority-matrix .quadrant p { margin: 0; font-size: 0.8rem; color: var(--text-muted); }
-    .glossary {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 1.5rem;
-    }
-    .glossary h2 { font-size: 0.95rem; margin: 0 0 0.75rem; color: var(--text-muted); font-weight: 600; }
-    .glossary dl { margin: 0; font-size: 0.875rem; line-height: 1.6; }
-    .glossary dt { font-weight: 600; color: var(--text); margin-top: 0.5rem; }
-    .glossary dt:first-child { margin-top: 0; }
-    .glossary dd { margin: 0.2rem 0 0 1rem; color: var(--text-muted); }
-    .section-desc { font-size: 0.875rem; color: var(--text-muted); margin: -0.5rem 0 1rem; line-height: 1.45; }
-    .legend { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1rem; font-size: 0.8rem; color: var(--text-muted); }
-    .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
-    .legend .swatch { width: 12px; height: 12px; border-radius: 3px; }
-    .legend .swatch-crit { background: linear-gradient(135deg, #ef4444, #b91c1c); }
-    .legend .swatch-high { background: linear-gradient(135deg, #f59e0b, #d97706); }
-    .legend .swatch-med { background: linear-gradient(135deg, #eab308, #ca8a04); }
-    .legend .swatch-low { background: linear-gradient(135deg, #22c55e, #16a34a); }
-    .legend .swatch-none { background: var(--border); }
-  </style>
+  <meta property="og:title" content="${escapeHtml(title)} — ${cleanliness.tier}/5 ${escapeHtml(cleanliness.label)}" />
+  <meta property="og:description" content="${escapeHtml(cleanliness.description)}" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="${escapeHtml(title)} — ${cleanliness.tier}/5" />
+  <meta name="twitter:description" content="${escapeHtml(cleanliness.label)}: ${escapeHtml(cleanliness.description)}" />
+  <style>${css}</style>
 </head>
 <body>
+  ${!hasLlm ? `<div class="no-llm-banner"><p class="no-llm-cta">Analysis run without LLM — for full results, run with LLM</p></div>` : ""}
   <div class="container">
     <p class="hero-caption">Technical Debt Cleanliness Score</p>
     <div class="hero tier-${cleanliness.tier}">
-      <div class="hero-grade">
-        <span class="num">${cleanliness.tier}</span>
-        <span class="of">of 5</span>
-      </div>
-      <div class="hero-body">
-        <div class="score-label">${escapeHtml(cleanliness.label)}</div>
-        <p class="score-desc">${escapeHtml(cleanliness.description)}</p>
-        <p class="report-meta">${escapeHtml(run.repoPath)} · ${run.completedAt ?? run.startedAt}</p>
-      </div>
+      <div class="score-badge" aria-label="Score ${cleanliness.tier} of 5">${scoreBadgeSvg}</div>
+      <div class="score-label">${escapeHtml(cleanliness.label)}</div>
+      <p class="score-desc">${escapeHtml(cleanliness.description)}</p>
+      <p class="report-meta">${escapeHtml(run.repoPath)} · ${run.completedAt ?? run.startedAt}</p>
     </div>
 
     <div class="summary-cards">
       <div class="card"><div class="value">${run.fileMetrics.length}</div><div class="label">Files</div></div>
       <div class="card"><div class="value">${run.debtItems.length}</div><div class="label">Debt items</div></div>
-      <div class="card"><div class="value">${run.debtItems.filter(d => d.severity === 'high' || d.severity === 'critical').length}</div><div class="label">High / Critical</div></div>
-      <div class="card"><div class="value">${run.fileMetrics.filter(m => (m.hotspotScore ?? 0) > 0.3).length}</div><div class="label">Hotspots</div></div>
+      <div class="card"><div class="value">${highCriticalCount}</div><div class="label">High / Critical</div></div>
+      <div class="card"><div class="value">${hotspotCount}</div><div class="label">Hotspots</div></div>
     </div>
 
-    ${run.llmOverallAssessment ? `
-    <div class="section llm-overall">
-      <h2>LLM overall assessment</h2>
-      <p class="llm-overall-text">${escapeHtml(run.llmOverallAssessment)}</p>
-    </div>
-    ` : ""}
-    ${run.llmNextSteps?.length ? `
-    <div class="section llm-next-steps">
-      <h2>Recommended next steps (AI)</h2>
-      <ul>
-        ${run.llmNextSteps.map((s) => `<li>${escapeHtml(s)}</li>`).join("\n        ")}
-      </ul>
-    </div>
-    ` : ""}
-
-    <div class="glossary">
-      <h2>Understanding this report</h2>
-      <dl>
-        <dt>Debt score (0–100)</dt>
-        <dd>Combined severity and confidence of all issues. Lower is better. &lt;40 = healthy, 40–70 = address soon, 70+ = high priority.</dd>
-        <dt>Severity</dt>
-        <dd><strong>Critical</strong> = fix first. <strong>High</strong> = plan soon. <strong>Medium/Low</strong> = backlog.</dd>
-        <dt>Cyclomatic complexity</dt>
-        <dd>Decision paths in code (if/else, loops). &gt;10 high, &gt;20 critical.</dd>
-        <dt>Hotspot</dt>
-        <dd>Files that change often and have high complexity—highest refactor risk.</dd>
-        <dt>Trend chart</dt>
-        <dd>Heuristic from recent commits; shows churn pattern, not full history.</dd>
-      </dl>
-    </div>
+    ${llmOverallSection}
 
     <div class="section">
-      <h2>Debt distribution by file</h2>
-      <p class="section-desc">Each block is a file. <strong>Size</strong> = complexity + churn (larger = heavier). <strong>Color</strong> = worst severity in that file. Click a block to see details.</p>
+      <h2>Files by debt</h2>
+      <p class="section-desc">Size = complexity + churn. Color = LLM severity per file (when LLM used). Click for details.</p>
       <div class="legend">
         <span><span class="swatch swatch-crit"></span> Critical</span>
         <span><span class="swatch swatch-high"></span> High</span>
@@ -314,135 +167,35 @@ function buildHtml(run: AnalysisRun, title: string, darkMode: boolean): string {
     </div>
 
     <div class="section">
-      <h2>Debt trend (recent commits)</h2>
-      <p class="section-desc">Estimated activity per commit (files changed). Rising pattern may indicate growing churn; not a full historical debt metric.</p>
-      <canvas id="trendChart"></canvas>
-    </div>
-
-    <div class="section">
       <h2>Prioritized recommendations</h2>
-      <p class="section-desc">Focus on high-impact items first. Easy wins = high severity but smaller files; harder = critical or hotspot files that need planning.</p>
+      <p class="section-desc">Focus on high-impact items first.</p>
       <div class="priority-matrix">
-        <div class="quadrant"><h4>High impact, easier</h4><p>High severity in smaller or less complex files. Good first targets.</p><ul id="q1"></ul></div>
-        <div class="quadrant"><h4>High impact, harder</h4><p>Critical or hotspot files. Plan refactors and tests.</p><ul id="q2"></ul></div>
+        <div class="quadrant"><h4>High impact, easier</h4><p>High severity in smaller files.</p><ul id="q1"></ul></div>
+        <div class="quadrant"><h4>High impact, harder</h4><p>Critical or hotspot files.</p><ul id="q2"></ul></div>
       </div>
     </div>
 
     <div class="section">
       <h2>All debt items</h2>
-      <p class="section-desc">Full list by severity. Click a row to see the detail panel.</p>
+      <p class="section-desc">Static (analysis) and LLM ratings shown side by side. Click a row for details.</p>
       <ul class="debt-list" id="debtList"></ul>
     </div>
   </div>
 
-  <div id="detail"><div class="panel"><h3 id="detailTitle"></h3><div class="file" id="detailFile"></div><div class="explanation" id="detailExplanation"></div><div class="suggested-code" id="detailSuggestedCode"></div><div class="file-assessment" id="detailFileAssessment"></div><p class="close-hint">Click outside to close</p></div></div>
+  <div id="detail">
+    <div class="panel">
+      <h3 id="detailTitle"></h3>
+      <div class="file" id="detailFile"></div>
+      <div class="detail-explanation" id="detailExplanation"></div>
+      <div class="suggested-code" id="detailSuggestedCode"></div>
+      <div class="file-assessment" id="detailFileAssessment"></div>
+      <p class="close-hint">Click outside to close</p>
+    </div>
+  </div>
 
   <script>
-    const DATA = ${dataJson};
-
-    function escapeHtml(s) {
-      const div = document.createElement('div');
-      div.textContent = s;
-      return div.innerHTML;
-    }
-
-    // Treemap: file blocks by debt weight
-    const fileScores = DATA.fileMetrics.map(m => ({
-      file: m.file,
-      score: (m.cyclomaticComplexity ?? 0) * 2 + (m.hotspotScore ?? 0) * 50 + (m.lineCount ?? 0) / 10,
-      complexity: m.cyclomaticComplexity ?? 0,
-      hotspot: m.hotspotScore ?? 0,
-    })).filter(x => x.score > 0).sort((a,b) => b.score - a.score).slice(0, 60);
-    const maxScore = Math.max(...fileScores.map(x => x.score), 1);
-    const debtByFile = new Map();
-    DATA.debtItems.forEach(d => {
-      const arr = debtByFile.get(d.file) || [];
-      arr.push(d);
-      debtByFile.set(d.file, arr);
-    });
-    const treemap = document.getElementById('treemap');
-    fileScores.forEach(({ file, score }) => {
-      const items = debtByFile.get(file) || [];
-      const severity = items.length ? items.reduce((a,b) => (a === 'critical' || b.severity === 'critical' ? 'critical' : b.severity === 'high' ? 'high' : b.severity), 'low') : 'none';
-      const cell = document.createElement('div');
-      cell.className = 'treemap-cell';
-      cell.dataset.severity = severity;
-      cell.style.flex = String(score / maxScore * 100) + ' 1 80px';
-      cell.style.minWidth = '80px';
-      cell.title = file;
-      cell.textContent = file.split('/').pop() || file;
-      cell.addEventListener('click', () => showDetail(file, items));
-      treemap.appendChild(cell);
-    });
-
-    // Trend chart
-    const ctx = document.getElementById('trendChart').getContext('2d');
-    new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: (DATA.debtTrend || []).map(t => t.commit),
-        datasets: [{
-          label: 'Debt score',
-          data: (DATA.debtTrend || []).map(t => t.score),
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          fill: true,
-          tension: 0.3,
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { beginAtZero: true, grid: { color: 'var(--border)' }, ticks: { color: 'var(--text-muted)' } },
-          x: { grid: { color: 'var(--border)' }, ticks: { color: 'var(--text-muted)' } }
-        }
-      }
-    });
-
-    // Priority quadrants
-    const highImpact = DATA.debtItems.filter(d => d.severity === 'high' || d.severity === 'critical').slice(0, 5);
-    document.getElementById('q1').innerHTML = highImpact.slice(0, 3).map(d => '<li style="font-size:0.8rem">' + escapeHtml(d.file) + '</li>').join('');
-    document.getElementById('q2').innerHTML = highImpact.slice(3, 6).map(d => '<li style="font-size:0.8rem">' + escapeHtml(d.file) + '</li>').join('');
-
-    // Debt list
-    const list = document.getElementById('debtList');
-    const sev = { critical: 4, high: 3, medium: 2, low: 1 };
-    DATA.debtItems.sort((a,b) => (sev[b.severity] || 0) - (sev[a.severity] || 0)).forEach(d => {
-      const li = document.createElement('li');
-      li.innerHTML = '<span class="title">' + escapeHtml(d.title) + '</span> <span class="badge badge-' + d.severity + '">' + d.severity + '</span>' + (d.suggestedCode ? ' <span class="badge" style="background:var(--accent);color:#fff">refactor</span>' : '') + '<br><span class="meta">' + escapeHtml(d.file) + (d.line ? ':' + d.line : '') + '</span>' + (d.insight ? '<div class="insight">' + escapeHtml(d.insight) + '</div>' : '');
-      li.addEventListener('click', () => showDetail(d.file, [d]));
-      list.appendChild(li);
-    });
-
-    function showDetail(file, items) {
-      const panel = document.getElementById('detail');
-      const item = items.length ? items[0] : null;
-      document.getElementById('detailTitle').textContent = item ? item.title : 'No debt items';
-      document.getElementById('detailFile').textContent = file;
-      document.getElementById('detailExplanation').textContent = item && item.insight ? item.insight : (item ? item.description : '');
-      const codeEl = document.getElementById('detailSuggestedCode');
-      if (item && item.suggestedCode) {
-        codeEl.style.display = 'block';
-        codeEl.innerHTML = '<strong>Suggested refactor</strong><pre>' + escapeHtml(item.suggestedCode) + '</pre>';
-      } else {
-        codeEl.style.display = 'none';
-        codeEl.textContent = '';
-      }
-      const fileMetric = DATA.fileMetrics.find(m => m.file === file);
-      const fileAssessEl = document.getElementById('detailFileAssessment');
-      if (fileMetric && (fileMetric.llmAssessment || fileMetric.llmSuggestedCode)) {
-        fileAssessEl.style.display = 'block';
-        let html = '<strong>LLM file assessment</strong><br>' + (fileMetric.llmAssessment ? escapeHtml(fileMetric.llmAssessment) : '');
-        if (fileMetric.llmSuggestedCode) html += '<br><br><strong>Suggested refactor</strong><pre style="margin:0.5rem 0 0;padding:0.5rem;background:var(--bg);border-radius:6px;font-size:0.8rem;overflow-x:auto">' + escapeHtml(fileMetric.llmSuggestedCode) + '</pre>';
-        fileAssessEl.innerHTML = html;
-      } else {
-        fileAssessEl.style.display = 'none';
-        fileAssessEl.textContent = '';
-      }
-      panel.classList.add('show');
-      panel.onclick = e => { if (e.target === panel) panel.classList.remove('show'); };
-    }
+const DATA = ${dataJson};
+${script}
   </script>
 </body>
 </html>`;
@@ -454,4 +207,78 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Remove trailing severity line and score line so they are not shown in the description. */
+function stripTrailingSeverityAndScore(text: string): string {
+  const lines = text.trim().split(/\n/).map((l) => l.trim()).filter(Boolean);
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1]!;
+    if (/^\s*\d{1,3}\s*$/.test(last)) {
+      lines.pop();
+      continue;
+    }
+    if (/^\s*(critical|high|medium|low|none)\s*$/i.test(last)) {
+      lines.pop();
+      continue;
+    }
+    break;
+  }
+  return lines.join("\n").trim();
+}
+
+/** Parse markdown-style code blocks and return HTML (prose + .code-block divs). */
+function renderLlmOutputToHtml(text: string): string {
+  if (!text?.trim()) return "";
+  const parts: Array<{ type: "prose"; content: string } | { type: "code"; lang: string; content: string }> = [];
+  const re = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      const prose = text.slice(lastIndex, m.index).trim();
+      if (prose) parts.push({ type: "prose", content: prose });
+    }
+    const lang = (m[1] ?? "").trim();
+    const code = (m[2] ?? "").trim();
+    parts.push({ type: "code", lang, content: code });
+    lastIndex = re.lastIndex;
+  }
+  const tail = text.slice(lastIndex).trim();
+  if (tail) {
+    const openIdx = tail.indexOf("```");
+    if (openIdx !== -1) {
+      const prosePart = tail.slice(0, openIdx).trim();
+      if (prosePart) parts.push({ type: "prose", content: prosePart });
+      const afterOpen = tail.slice(openIdx + 3).trim();
+      const newline = afterOpen.indexOf("\n");
+      const langPart = newline === -1 ? "" : afterOpen.slice(0, newline).trim();
+      const lang = /^\w+$/.test(langPart) ? langPart : "";
+      const codeContent = newline === -1 ? afterOpen : afterOpen.slice(newline + 1).trim();
+      parts.push({ type: "code", lang, content: codeContent });
+    } else {
+      parts.push({ type: "prose", content: tail });
+    }
+  }
+  return parts
+    .map((p) => {
+      if (p.type === "prose") {
+        return (
+          '<div class="llm-prose">' +
+          escapeHtml(p.content).replace(/\n/g, "<br>") +
+          "</div>"
+        );
+      }
+      const langLabel = p.lang ? p.lang.charAt(0).toUpperCase() + p.lang.slice(1) : "Code";
+      return (
+        '<div class="code-block">' +
+        '<span class="lang-label">' +
+        escapeHtml(langLabel) +
+        "</span>" +
+        "<pre><code>" +
+        escapeHtml(p.content) +
+        "</code></pre></div>"
+      );
+    })
+    .join("");
 }

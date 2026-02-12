@@ -16,6 +16,17 @@ export type DebtCategory =
 
 export type Severity = "low" | "medium" | "high" | "critical";
 
+/** Order for sorting by severity (higher = more severe). */
+export const SEVERITY_ORDER: Record<Severity, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+/** LLM-assigned file debt severity; "none" = no significant debt. */
+export type LlmFileSeverity = Severity | "none";
+
 export interface DebtItem {
   id: string;
   file: string;
@@ -31,6 +42,10 @@ export interface DebtItem {
   insight?: string;
   /** LLM-suggested simplified/refactored code snippet (when applicable) */
   suggestedCode?: string;
+  /** Full raw LLM response for this debt item (displayed in report) */
+  llmRawResponse?: string;
+  /** LLM-assigned severity for this item: critical | high | medium | low | none */
+  llmSeverity?: LlmFileSeverity;
   /** Raw metrics that contributed (e.g. cyclomatic complexity value) */
   metrics?: Record<string, number | string>;
   /** Suggested fix or refactor (short text) */
@@ -63,6 +78,12 @@ export interface FileMetrics {
   llmAssessment?: string;
   /** LLM-suggested refactored code snippet for this file (when applicable) */
   llmSuggestedCode?: string;
+  /** LLM-rated technical debt for this file 0–100 (higher = more debt), when available */
+  llmFileScore?: number;
+  /** LLM-assigned severity for this file: critical | high | medium | low | none */
+  llmSeverity?: LlmFileSeverity;
+  /** Full raw LLM assessment response for this file (displayed in report) */
+  llmRawAssessment?: string;
 }
 
 export interface GitBlameEntry {
@@ -96,6 +117,14 @@ export interface AnalysisRun {
   llmOverallAssessment?: string;
   /** LLM-generated prioritized next steps (when LLM attached) */
   llmNextSteps?: string[];
+  /** True if LLM was invoked this run (even if it returned no data) */
+  llmAttempted?: boolean;
+  /** LLM-derived overall debt score 0–100 when available (higher = more debt) */
+  llmOverallScore?: number;
+  /** LLM-assigned overall severity: critical | high | medium | low | none */
+  llmOverallSeverity?: LlmFileSeverity;
+  /** Full raw LLM overall assessment response (displayed in report) */
+  llmOverallRaw?: string;
 }
 
 /** Pluggable analyzer: given file paths and content, returns metrics + debt items */

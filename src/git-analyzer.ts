@@ -4,7 +4,6 @@
  */
 
 import { simpleGit, type SimpleGit } from "simple-git";
-import type { GitBlameEntry } from "./types.js";
 
 export interface GitStats {
   byFile: Map<string, { commits: number; churn: number; lastChange: string }>;

@@ -1,4 +1,5 @@
 import type { AnalysisRun, DebtItem } from "../types.js";
+import { SEVERITY_ORDER } from "../types.js";
 
 export function generateMarkdownReport(run: AnalysisRun): string {
   const lines: string[] = [];
@@ -68,19 +69,10 @@ export function generateMarkdownReport(run: AnalysisRun): string {
     lines.push("## What to fix");
     lines.push("");
     const top = run.debtItems
-      .sort((a, b) => ({ critical: 4, high: 3, medium: 2, low: 1 }[b.severity] ?? 0) - ({ critical: 4, high: 3, medium: 2, low: 1 }[a.severity] ?? 0))
+      .sort((a, b) => (SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0))
       .slice(0, 12);
     for (const d of top) {
       lines.push(`- **[${d.severity}]** ${d.title} — \`${d.file}${d.line != null ? `:${d.line}` : ""}\``);
-    }
-    lines.push("");
-  }
-
-  if (run.llmNextSteps?.length) {
-    lines.push("## Recommended next steps (AI)");
-    lines.push("");
-    for (const step of run.llmNextSteps) {
-      lines.push(`- ${step}`);
     }
     lines.push("");
   }

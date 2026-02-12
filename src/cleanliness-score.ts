@@ -20,9 +20,9 @@ const TIERS: CleanlinessTier[] = [
 /** Debt score 0-100 (higher = worse). Returns tier 1-5 (1 = worst, 5 = best). */
 export function getCleanlinessTier(debtScore: number): CleanlinessTier {
   const clamped = Math.max(0, Math.min(100, Math.round(debtScore)));
-  if (clamped <= 20) return TIERS[4]!;  // 5/5
-  if (clamped <= 40) return TIERS[3]!;  // 4/5
-  if (clamped <= 60) return TIERS[2]!;  // 3/5
-  if (clamped <= 80) return TIERS[1]!;  // 2/5
-  return TIERS[0]!;  // 1/5
+  if (clamped <= 20) return TIERS[4]!; // 5/5
+  if (clamped <= 40) return TIERS[3]!; // 4/5
+  if (clamped <= 60) return TIERS[2]!; // 3/5
+  if (clamped <= 80) return TIERS[1]!; // 2/5
+  return TIERS[0]!; // 1/5
 }

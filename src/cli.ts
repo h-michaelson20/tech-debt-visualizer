@@ -10,18 +10,17 @@ import { Command } from "commander";
 import chalk from "chalk";
 import cliProgress from "cli-progress";
 import { getCleanlinessTier } from "./cleanliness-score.js";
+import { getDebtScore } from "./debt-score.js";
 import { runAnalysis } from "./engine.js";
 import {
   assessFileCleanliness,
   assessOverallCleanliness,
-  enrichDebtWithInsights,
   resolveLLMConfig,
-  suggestNextSteps,
 } from "./llm.js";
 import { generateHtmlReport } from "./reports/html.js";
 import { generateJsonReport } from "./reports/json.js";
 import { generateMarkdownReport } from "./reports/markdown.js";
-import type { AnalysisRun } from "./types.js";
+import { type AnalysisRun, SEVERITY_ORDER } from "./types.js";
 
 const program = new Command();
 
@@ -40,32 +39,40 @@ program
   .option("--llm", "Enable LLM (default). Use with --llm-key and/or --llm-model")
   .option("--llm-key <key>", "API key for LLM (overrides GEMINI_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY)")
   .option("--llm-model <model>", "Model name (e.g. gemini-1.5-flash, gpt-4o-mini)")
+  .option("--llm-max-tokens <n>", "Max tokens for LLM responses (default: 2048 for overall, 1024 per-file)", (v) => parseInt(v, 10))
   .option("--ci", "CI mode: minimal output, exit with non-zero if debt score is high")
-  .action(async (path: string, opts: { output?: string; format?: string; llm?: boolean; ci?: boolean; llmKey?: string; llmModel?: string }) => {
+  .action(async (path: string, opts: { output?: string; format?: string; llm?: boolean; ci?: boolean; llmKey?: string; llmModel?: string; llmMaxTokens?: number }) => {
     const repoPath = join(process.cwd(), path);
     const format = (opts.format ?? "cli") as "cli" | "html" | "json" | "markdown";
     const useLlm = opts.llm !== false;
     const outputPath = opts.output ?? (format === "html" ? "tech-debt-report.html" : undefined);
-    const totalSteps = useLlm ? 6 : 4;
+    const llmConfigOverrides = {
+      apiKey: opts.llmKey,
+      model: opts.llmModel,
+      ...(opts.llmMaxTokens != null && opts.llmMaxTokens > 0 ? { maxTokens: opts.llmMaxTokens } : {}),
+    };
+
     const progress = new cliProgress.SingleBar(
       {
-        format: chalk.cyan(" {bar} ") + "| {task} | {value}/{total}",
+        format:
+          chalk.cyan(" {bar} ") + "| {percentage}% | {value}/{total} | {task}",
         barCompleteChar: "█",
         barIncompleteChar: "░",
       },
       cliProgress.Presets.shades_classic
     );
+
+    let run: Awaited<ReturnType<typeof runAnalysis>>;
+    const fileContents = new Map<string, string>();
+
     try {
       process.stderr.write(chalk.bold.blue("\n  Technical Debt Visualizer\n\n"));
-      progress.start(totalSteps, 0, { task: "Discovering files..." });
+
+      const discoverySteps = useLlm ? 2 : 4;
+      progress.start(discoverySteps, 0, { task: "Discovering files..." });
+      run = await runAnalysis({ repoPath, maxFiles: 1500, gitDays: 90 });
       progress.update(1, { task: "Discovering files..." });
-      const run = await runAnalysis({
-        repoPath,
-        maxFiles: 1500,
-        gitDays: 90,
-      });
       progress.update(2, { task: "Analyzing..." });
-      const fileContents = new Map<string, string>();
       for (const f of run.fileMetrics.map((m) => m.file)) {
         try {
           fileContents.set(f, await readFile(join(repoPath, f), "utf-8"));
@@ -73,10 +80,24 @@ program
           // ignore
         }
       }
-      const llmConfigOverrides = { apiKey: opts.llmKey, model: opts.llmModel };
-      if (useLlm) {
+      if (!useLlm) {
+        progress.update(4, { task: "Done" });
+        progress.stop();
+      } else {
+        progress.stop();
+
+        const maxFiles = 80;
+        const filesToAssess = run.fileMetrics.slice(0, maxFiles);
+        const totalSteps = 2 + filesToAssess.length + 1;
+
+        progress.start(totalSteps, 2, {
+          task: filesToAssess.length > 0 ? `LLM: file 0/${filesToAssess.length}` : "LLM: overall...",
+        });
+
         const llmConfig = resolveLLMConfig(llmConfigOverrides);
         if (!llmConfig) {
+          progress.update(totalSteps, { task: "Skipping LLM (no key)" });
+          progress.stop();
           process.stderr.write(
             chalk.yellow(
               "  No LLM API key found. Set GEMINI_API_KEY or OPENAI_API_KEY (or use --llm-key <key>).\n" +
@@ -86,41 +107,56 @@ program
             )
           );
         } else {
-          progress.update(3, { task: "LLM: per-file cleanliness..." });
-          const allFilePaths = run.fileMetrics.map((m) => m.file);
-          const maxFiles = 80;
-          const filesToAssess = run.fileMetrics.slice(0, maxFiles);
+          run.llmAttempted = true;
           const config = { ...llmConfigOverrides };
-          for (const m of filesToAssess) {
-            const content = fileContents.get(m.file);
-            if (!content) continue;
-            const result = await assessFileCleanliness(m.file, content, m, config, { filePaths: allFilePaths });
-            if (result) {
-              const idx = run.fileMetrics.findIndex((x) => x.file === m.file);
-              if (idx >= 0)
-                run.fileMetrics[idx] = {
-                  ...run.fileMetrics[idx]!,
-                  llmAssessment: result.assessment,
-                  llmSuggestedCode: result.suggestedCode,
-                };
+          const allFilePaths = run.fileMetrics.map((m) => m.file);
+          const FILE_BATCH_SIZE = 10;
+
+          for (let i = 0; i < filesToAssess.length; i += FILE_BATCH_SIZE) {
+            const batch = filesToAssess.slice(i, i + FILE_BATCH_SIZE);
+            const completedBefore = i;
+            const results = await Promise.allSettled(
+              batch.map((m) => {
+                const content = fileContents.get(m.file);
+                if (!content) return Promise.resolve(null);
+                return assessFileCleanliness(m.file, content, m, config, { filePaths: allFilePaths });
+              })
+            );
+            for (let j = 0; j < batch.length; j++) {
+              const result = results[j];
+              if (result?.status === "fulfilled" && result.value) {
+                const m = batch[j]!;
+                const idx = run.fileMetrics.findIndex((x) => x.file === m.file);
+                if (idx >= 0)
+                  run.fileMetrics[idx] = {
+                    ...run.fileMetrics[idx]!,
+                    llmAssessment: result.value.assessment,
+                    llmSuggestedCode: result.value.suggestedCode,
+                    llmFileScore: result.value.fileScore,
+                    llmSeverity: result.value.severity,
+                    llmRawAssessment: result.value.raw,
+                  };
+              }
             }
+            const completedFiles = Math.min(completedBefore + batch.length, filesToAssess.length);
+            progress.update(2 + completedFiles, {
+              task: `LLM: file ${completedFiles}/${filesToAssess.length}`,
+            });
           }
-          progress.update(4, { task: "LLM: debt item insights..." });
-          let debtItems = run.debtItems;
-          if (debtItems.length > 0) {
-            debtItems = await enrichDebtWithInsights(debtItems.slice(0, 25), fileContents, config);
-            const byId = new Map(debtItems.map((d) => [d.id, d]));
-            run.debtItems = run.debtItems.map((d) => byId.get(d.id) ?? d);
-          }
-          progress.update(5, { task: "LLM: overall assessment..." });
+
+          const overallStep = 2 + filesToAssess.length;
+          progress.update(overallStep, { task: "LLM: overall assessment..." });
           const overall = await assessOverallCleanliness(run, config);
-          if (overall) run.llmOverallAssessment = overall;
-          const nextSteps = await suggestNextSteps(run, config);
-          if (nextSteps?.length) run.llmNextSteps = nextSteps;
+          if (overall) {
+            run.llmOverallAssessment = overall.assessment;
+            if (overall.score != null) run.llmOverallScore = overall.score;
+            if (overall.severity) run.llmOverallSeverity = overall.severity;
+            run.llmOverallRaw = overall.raw;
+          }
+          progress.update(totalSteps, { task: "Done" });
+          progress.stop();
         }
       }
-      progress.update(totalSteps, { task: "Done" });
-      progress.stop();
       if (format === "html" && outputPath) {
         await generateHtmlReport(run, { outputPath, title: "Technical Debt Report", darkMode: true });
         process.stdout.write(chalk.green(`\n  Report written to ${outputPath}\n\n`));
@@ -147,11 +183,17 @@ program
       } else {
         printCliReport(run, opts.ci ?? false);
         if (!run.llmOverallAssessment) {
-          process.stdout.write(
-            chalk.dim(
-              "  To get AI insights: set GEMINI_API_KEY (or OPENAI_API_KEY) or use --llm-key <key>. Run without --no-llm.\n\n"
-            )
-          );
+          if (run.llmAttempted) {
+            process.stdout.write(
+              chalk.dim("  LLM was used but returned no insights. Check [LLM] errors above or verify your API key.\n\n")
+            );
+          } else {
+            process.stdout.write(
+              chalk.dim(
+                "  To get AI insights: set GEMINI_API_KEY (or OPENAI_API_KEY) or use --llm-key <key>. Run without --no-llm.\n\n"
+              )
+            );
+          }
         }
         if (opts.ci && getDebtScore(run) > 60) process.exit(1);
       }
@@ -161,14 +203,6 @@ program
       process.exit(1);
     }
   });
-
-function getDebtScore(run: AnalysisRun): number {
-  const items = run.debtItems;
-  if (items.length === 0) return 0;
-  const severityWeight = { low: 1, medium: 2, high: 3, critical: 4 };
-  const sum = items.reduce((a, b) => a + (severityWeight[b.severity] ?? 0) * b.confidence, 0);
-  return Math.min(100, Math.round((sum / items.length) * 25));
-}
 
 function printCliReport(run: AnalysisRun, ci: boolean): void {
   const { debtItems, fileMetrics, errors } = run;
@@ -210,7 +244,10 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
   if (hotspots.length > 0) {
     process.stdout.write(chalk.bold("  Hotspot files (high churn + complexity)\n"));
     for (const h of hotspots) {
-      process.stdout.write(`  ${chalk.red("●")} ${h.file} ${chalk.dim(`(score ${(h.hotspotScore ?? 0).toFixed(2)})`)}\n`);
+      const hotspotInfo = `(score ${(h.hotspotScore ?? 0).toFixed(2)})`;
+      const llmInfo = h.llmFileScore != null ? ` LLM debt ${h.llmFileScore}/100` : "";
+      const llmSev = h.llmSeverity ? ` LLM severity ${h.llmSeverity}` : "";
+      process.stdout.write(`  ${chalk.red("●")} ${h.file} ${chalk.dim(hotspotInfo + llmInfo + llmSev)}\n`);
       if (h.llmAssessment) process.stdout.write(chalk.dim(`    ${h.llmAssessment.replace(/\n/g, "\n    ")}\n`));
       if (h.llmSuggestedCode) {
         process.stdout.write(chalk.cyan("    Suggested refactor:\n"));
@@ -227,7 +264,7 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     const sev = chalkSeverity(d.severity);
     process.stdout.write(`  ${sev} ${d.title}\n`);
     process.stdout.write(chalk.dim(`    ${d.file}${d.line ? `:${d.line}` : ""}\n`));
-    if (d.insight) process.stdout.write(chalk.dim(`    ${d.insight.slice(0, 120)}${d.insight.length > 120 ? "…" : ""}\n`));
+    if (d.insight) process.stdout.write(chalk.dim(`    ${d.insight.replace(/\n/g, "\n    ")}\n`));
     if (d.suggestedCode) {
       process.stdout.write(chalk.cyan("    Suggested refactor:\n"));
       process.stdout.write(chalk.dim(d.suggestedCode.split("\n").map((l) => "    " + l).join("\n") + "\n"));
@@ -254,19 +291,11 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     process.stdout.write(chalk.dim("  No debt items. Keep it up.\n"));
   }
   process.stdout.write("\n");
-  if (run.llmNextSteps && run.llmNextSteps.length > 0) {
-    process.stdout.write(chalk.bold.cyan("  Recommended next steps (AI)\n"));
-    process.stdout.write(chalk.dim("  " + "—".repeat(50) + "\n"));
-    for (const step of run.llmNextSteps) {
-      process.stdout.write(chalk.cyan("  • ") + step + "\n");
-    }
-    process.stdout.write("\n");
-  }
   process.stdout.write(chalk.dim("  Run with --format html -o report.html for the interactive dashboard.\n\n"));
 }
 
 function severityOrder(s: string): number {
-  return { critical: 4, high: 3, medium: 2, low: 1 }[s] ?? 0;
+  return SEVERITY_ORDER[s as keyof typeof SEVERITY_ORDER] ?? 0;
 }
 
 function chalkSeverity(s: string): string {

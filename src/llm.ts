@@ -1,25 +1,36 @@
 /**
  * LLM integration: debt explanations, per-file cleanliness, and overall assessment.
  * Supports OpenAI, OpenRouter (OpenAI-compatible), and Google Gemini.
+ *
+ * No time limits: requests run until the API returns. Truncation is only from token limits.
+ * Override with LLMConfig.maxTokens or --llm-max-tokens. Defaults are generous to avoid cut-off:
+ * - Debt item insights (explainDebtItem): config.maxTokens ?? DEFAULT_MAX_TOKENS (2048)
+ * - Per-file assessment (assessFileCleanliness): config.maxTokens ?? DEFAULT_MAX_TOKENS_FILE (8192)
+ * - Overall assessment (assessOverallCleanliness): config.maxTokens ?? DEFAULT_MAX_TOKENS_OVERALL (8192)
+ * - enrichDebtWithInsights: passes config.maxTokens ?? DEFAULT_MAX_TOKENS to each item
  */
 
-import type { DebtItem, FileMetrics } from "./types.js";
-import type { AnalysisRun } from "./types.js";
+import type { AnalysisRun, DebtItem, FileMetrics, LlmFileSeverity } from "./types.js";
 
 export interface LLMConfig {
   apiKey?: string;
   baseURL?: string;
   model?: string;
+  /** Overrides default token limits for LLM responses (used where applicable). */
   maxTokens?: number;
 }
 
 export type LLMProvider = "openai" | "openrouter" | "gemini";
 
 const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
-const OPENROUTER_DEFAULT_MODEL = "google/gemini-2.0-flash-001";
-const GEMINI_DEFAULT_MODEL = "gemini-1.5-flash";
-const DEFAULT_MAX_TOKENS = 300;
-const DEFAULT_MAX_TOKENS_OVERALL = 500;
+const OPENROUTER_DEFAULT_MODEL = "google/gemini-2.5-flash";
+const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
+/** Default for enrichDebtWithInsights (debt item insights). Override with config.maxTokens. */
+const DEFAULT_MAX_TOKENS = 2048;
+/** Default for assessFileCleanliness. */
+const DEFAULT_MAX_TOKENS_FILE = 8192;
+/** Default for assessOverallCleanliness. Override with config.maxTokens. */
+const DEFAULT_MAX_TOKENS_OVERALL = 8192;
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -33,16 +44,86 @@ function parseCodeBlockAndProse(response: string): { prose: string; code?: strin
   return { prose, code: code || undefined };
 }
 
-/** Resolve provider and auth from config + env. OpenRouter and Gemini take precedence when their keys are set. */
+/** Parse trailing "severity" line and "score" line from LLM text; return assessment + optional score/severity. */
+function parseSeverityAndScore(lines: string[]): {
+  assessment: string;
+  score?: number;
+  severity?: LlmFileSeverity;
+} {
+  let assessment = lines.join("\n").trim();
+  let score: number | undefined;
+  let severity: LlmFileSeverity | undefined;
+  if (lines.length > 0) {
+    const lastLine = lines[lines.length - 1]!;
+    const scoreMatch = lastLine.match(/^\s*(\d{1,3})\s*$/);
+    if (scoreMatch) {
+      score = Math.min(100, Math.max(0, parseInt(scoreMatch[1]!, 10)));
+      const rest = lines.length > 1 ? lines.slice(0, -1) : [];
+      if (rest.length > 0) {
+        const severityLine = rest[rest.length - 1]!;
+        const sevMatch = severityLine.match(/^\s*(critical|high|medium|low|none)\s*$/i);
+        if (sevMatch) {
+          severity = sevMatch[1]!.toLowerCase() as LlmFileSeverity;
+          rest.pop();
+        }
+        assessment = rest.join("\n").trim();
+      } else {
+        assessment = "";
+      }
+    }
+  }
+  return { assessment: assessment || lines.join("\n").trim(), score, severity };
+}
+
+/** Parse per-file assessment: prose, fileScore 0–100, severity (critical|high|medium|low|none), optional code block. */
+function parseFileAssessmentResponse(raw: string): {
+  assessment: string;
+  fileScore?: number;
+  severity?: LlmFileSeverity;
+  code?: string;
+} {
+  const { prose, code } = parseCodeBlockAndProse(raw);
+  const lines = prose.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const parsed = parseSeverityAndScore(lines);
+  return {
+    assessment: parsed.assessment || prose,
+    fileScore: parsed.score,
+    severity: parsed.severity,
+    code: code || undefined,
+  };
+}
+
+/** Resolve provider and auth from config + env. When --llm-key is used, provider is inferred from key format so a Gemini key is not sent to OpenRouter. */
 export function resolveLLMConfig(config: LLMConfig = {}): {
   provider: LLMProvider;
   apiKey: string;
   baseURL: string;
   model: string;
 } | null {
-  const openRouterKey = config.apiKey ?? process.env.OPENROUTER_API_KEY;
-  const geminiKey = config.apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY;
-  const openaiKey = config.apiKey ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  const cliKey = config.apiKey;
+  const openRouterKey = cliKey ?? process.env.OPENROUTER_API_KEY;
+  const geminiKey = cliKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY;
+  const openaiKey = cliKey ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+
+  // When a single key is passed (e.g. --llm-key), pick provider by key format so we don't send a Gemini key to OpenRouter (401 "No cookie auth").
+  if (cliKey) {
+    if (cliKey.startsWith("AIza")) {
+      return {
+        provider: "gemini",
+        apiKey: cliKey,
+        baseURL: GEMINI_BASE,
+        model: config.model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL,
+      };
+    }
+    if (cliKey.startsWith("sk-")) {
+      return {
+        provider: "openai",
+        apiKey: cliKey,
+        baseURL: config.baseURL ?? process.env.OPENAI_BASE_URL ?? "",
+        model: config.model ?? process.env.OPENAI_MODEL ?? OPENAI_DEFAULT_MODEL,
+      };
+    }
+  }
 
   if (openRouterKey) {
     return {
@@ -102,11 +183,18 @@ async function openAICompatibleCompletion(
         max_tokens: opts.maxTokens,
       }),
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const bodyText = await res.text();
+    if (!res.ok) {
+      process.stderr.write(
+        `[LLM] OpenAI-compatible API error ${res.status}: ${bodyText.slice(0, 200)}${bodyText.length > 200 ? "..." : ""}\n`
+      );
+      return null;
+    }
+    const data = JSON.parse(bodyText) as { choices?: Array<{ message?: { content?: string } }> };
     const text = data.choices?.[0]?.message?.content?.trim();
     return text || null;
-  } catch {
+  } catch (e) {
+    process.stderr.write(`[LLM] Request failed: ${e instanceof Error ? e.message : String(e)}\n`);
     return null;
   }
 }
@@ -129,21 +217,29 @@ async function geminiCompletion(
         },
       }),
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
+    const bodyText = await res.text();
+    if (!res.ok) {
+      process.stderr.write(
+        `[LLM] Gemini API error ${res.status}: ${bodyText.slice(0, 300)}${bodyText.length > 300 ? "..." : ""}\n`
+      );
+      return null;
+    }
+    const data = JSON.parse(bodyText) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     return text || null;
-  } catch {
+  } catch (e) {
+    process.stderr.write(`[LLM] Gemini request failed: ${e instanceof Error ? e.message : String(e)}\n`);
     return null;
   }
 }
-
+/** Optional progress callback: (completedBatches, totalBatches) after each batch. */
 export async function enrichDebtWithInsights(
   items: DebtItem[],
   fileContents: Map<string, string>,
-  config: LLMConfig = {}
+  config: LLMConfig = {},
+  onProgress?: (completed: number, total: number) => void
 ): Promise<DebtItem[]> {
   const resolved = resolveLLMConfig(config);
   if (!resolved) return items;
@@ -153,6 +249,7 @@ export async function enrichDebtWithInsights(
 
   const enriched: DebtItem[] = [];
   const batchSize = 5;
+  const totalBatches = Math.ceil(items.length / batchSize);
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
     const results = await Promise.allSettled(
@@ -175,11 +272,14 @@ export async function enrichDebtWithInsights(
           ...item,
           insight: v.insight,
           suggestedCode: v.suggestedCode,
+          llmSeverity: v.severity,
+          llmRawResponse: v.raw,
         });
       } else {
         enriched.push(item);
       }
     }
+    onProgress?.(Math.floor((i + batchSize) / batchSize), totalBatches);
   }
   return enriched;
 }
@@ -194,19 +294,13 @@ async function explainDebtItem(
     maxTokens: number;
     provider?: LLMProvider;
   }
-): Promise<{ insight: string; suggestedCode?: string } | null> {
+): Promise<{ insight: string; suggestedCode?: string; severity?: LlmFileSeverity; raw: string } | null> {
   const snippet = item.line
     ? fileContent.split("\n").slice(Math.max(0, item.line - 3), (item.endLine ?? item.line) + 2).join("\n")
     : fileContent.slice(0, 1500);
 
-  const prompt = `You are a senior engineer reviewing technical debt. For this item:
-
-1) In 1-2 sentences: why it matters for maintainability or risk, and what to do.
-2) If a concrete code simplification or refactor is possible (e.g. reduce branching, extract function, simplify condition), provide ONLY the refactored/simplified code in a markdown code block. Use the same language as the snippet. If no code change is needed or the fix is trivial (e.g. "add a comment"), omit the code block.
-
-Debt: ${item.title}
-Category: ${item.category}
-Description: ${item.description}
+  const prompt = `Technical debt item: ${item.title} (${item.category})
+${item.description}
 ${item.metrics ? `Metrics: ${JSON.stringify(item.metrics)}` : ""}
 
 Relevant code:
@@ -214,12 +308,32 @@ Relevant code:
 ${snippet}
 \`\`\`
 
-Reply format: Short explanation first, then optionally a code block with the suggested refactor. No other preamble.`;
+Output only:
+1. A two- to four-sentence summary of the issues: why it matters and what to do. No code block unless absolutely necessary to demonstrate.
+2. On the next line write only one word: critical, high, medium, low, or none (how severe this debt item is; none = not significant).
+No preamble.`;
 
-  const raw = await chat(prompt, { ...opts, maxTokens: 500 });
+  const raw = await chat(prompt, opts);
   if (!raw) return null;
   const { prose, code } = parseCodeBlockAndProse(raw);
-  return { insight: prose || item.description, suggestedCode: code };
+  const lines = prose.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  let severity: LlmFileSeverity | undefined;
+  let assessment = prose;
+  if (lines.length > 0) {
+    const lastLine = lines[lines.length - 1]!;
+    const sevMatch = lastLine.match(/^\s*(critical|high|medium|low|none)\s*$/i);
+    if (sevMatch) {
+      severity = sevMatch[1]!.toLowerCase() as LlmFileSeverity;
+      const rest = lines.slice(0, -1).join("\n").trim();
+      assessment = rest || prose;
+    }
+  }
+  return {
+    insight: assessment || item.description,
+    suggestedCode: code,
+    severity,
+    raw,
+  };
 }
 
 /** Context about the rest of the repo for cross-file optimization suggestions. */
@@ -228,54 +342,53 @@ export interface RepoContext {
   filePaths: string[];
 }
 
-/** Per-file: LLM assesses cleanliness and suggests optimizations with cross-file context. */
+/** Per-file: LLM gives a short summary, a 0–100 debt score, and optionally one refactor. One request per file; call in parallel from CLI. */
 export async function assessFileCleanliness(
   filePath: string,
   content: string,
   metrics: FileMetrics,
   config: LLMConfig = {},
   repoContext?: RepoContext
-): Promise<{ assessment: string; suggestedCode?: string } | null> {
+): Promise<{ assessment: string; suggestedCode?: string; fileScore?: number; severity?: LlmFileSeverity; raw: string } | null> {
   const resolved = resolveLLMConfig(config);
   if (!resolved) return null;
 
-  const snippet = content.length > 4000 ? content.slice(0, 4000) + "\n\n[... truncated]" : content;
-  const otherFiles =
-    repoContext?.filePaths?.filter((p) => p !== filePath).slice(0, 80) ?? [];
-  const repoContextBlock =
-    otherFiles.length > 0
-      ? `\nRepository context (other files in this run): ${otherFiles.join(", ")}.\nWhen suggesting optimizations, you may reference other files (e.g. extract to a shared module, reuse from another file, or move code between files). Explain why each suggestion helps.\n`
-      : "";
+  const snippet = content.length > 3500 ? content.slice(0, 3500) + "\n\n[... truncated]" : content;
 
-  const prompt = `You are a senior engineer assessing code cleanliness and possible optimizations for this file.
-
-1) In 1-3 sentences: how clean and maintainable is it, and one or two concrete improvements (or "Looks good" if fine). Explain why each improvement matters.
-2) If one specific optimization is possible (e.g. simplify a function, reduce nesting, extract a helper, or a cross-file refactor like moving code to a shared module), provide ONLY that refactored snippet in a markdown code block. Same language as the file. Briefly say why it helps. If no clear code change applies, omit the code block.
-${repoContextBlock}
-File: ${filePath}
-Metrics: complexity ${metrics.cyclomaticComplexity ?? "?"}, lines ${metrics.lineCount}, ${metrics.hasDocumentation ? "has docs" : "no module docs"}${metrics.hotspotScore != null ? `, hotspot ${metrics.hotspotScore.toFixed(2)}` : ""}.
+  const prompt = `File: ${filePath}
+Metrics: complexity ${metrics.cyclomaticComplexity ?? "?"}, lines ${metrics.lineCount}, ${metrics.hasDocumentation ? "has docs" : "no module docs"}${metrics.hotspotScore != null ? `, hotspot ${metrics.hotspotScore.toFixed(2)}` : ""}
 
 Code:
 \`\`\`
 ${snippet}
 \`\`\`
 
-Reply: short assessment first (with brief "why"), then optionally a code block with the suggested refactor. No preamble.`;
+Output only:
+1. A two- to four-sentence summary of the issues (how clean/maintainable, main concerns). No code block unless absolutely necessary to demonstrate.
+2. On the next line write only one word: critical, high, medium, low, or none (this file's technical debt severity; none = no significant debt).
+3. On the line after that write only a number 0-100 (100 = most technical debt).
+No preamble.`;
 
   const raw = await chat(prompt, {
     ...resolved,
-    maxTokens: config.maxTokens ?? 500,
+    maxTokens: config.maxTokens ?? DEFAULT_MAX_TOKENS_FILE,
   });
   if (!raw) return null;
-  const { prose, code } = parseCodeBlockAndProse(raw);
-  return { assessment: prose, suggestedCode: code };
+  const parsed = parseFileAssessmentResponse(raw);
+  return {
+    assessment: parsed.assessment,
+    suggestedCode: parsed.code,
+    fileScore: parsed.fileScore,
+    severity: parsed.severity,
+    raw,
+  };
 }
 
-/** Overall: LLM assesses the whole codebase cleanliness in a short paragraph. */
+/** Overall: LLM assesses the whole codebase and optionally a 0–100 debt score. */
 export async function assessOverallCleanliness(
   run: AnalysisRun,
   config: LLMConfig = {}
-): Promise<string | null> {
+): Promise<{ assessment: string; score?: number; severity?: LlmFileSeverity; raw: string } | null> {
   const resolved = resolveLLMConfig(config);
   if (!resolved) return null;
 
@@ -288,61 +401,25 @@ export async function assessOverallCleanliness(
     .slice(0, 12)
     .map((m) => m.file);
 
-  const prompt = `You are a senior engineer giving a brief overall assessment of a codebase's technical debt and cleanliness.
+  const prompt = `Codebase summary: ${fileCount} files, ${debtCount} debt items (${criticalHigh} critical/high), ${hotspots} hotspots. Top risk files: ${topFiles.join(", ")}
 
-Summary:
-- ${fileCount} files analyzed
-- ${debtCount} debt items (${criticalHigh} critical/high)
-- ${hotspots} hotspot files (high churn + complexity)
-- Top files by risk: ${topFiles.join(", ")}
-
-In one short paragraph (3-5 sentences), assess overall cleanliness: main strengths or concerns, and the single most important thing to improve. Be direct and actionable. No preamble.`;
-
-  return chat(prompt, {
-    ...resolved,
-    maxTokens: config.maxTokens ?? DEFAULT_MAX_TOKENS_OVERALL,
-  });
-}
-
-/** LLM suggests 3–5 prioritized next steps (actionable bullets). */
-export async function suggestNextSteps(
-  run: AnalysisRun,
-  config: LLMConfig = {}
-): Promise<string[] | null> {
-  const resolved = resolveLLMConfig(config);
-  if (!resolved) return null;
-
-  const fileCount = run.fileMetrics.length;
-  const debtCount = run.debtItems.length;
-  const bySeverity = run.debtItems.reduce(
-    (acc, d) => {
-      acc[d.severity] = (acc[d.severity] ?? 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-  const severityOrd = (s: string) => ({ critical: 4, high: 3, medium: 2, low: 1 }[s] ?? 0);
-  const topItems = run.debtItems
-    .sort((a, b) => severityOrd(b.severity) - severityOrd(a.severity))
-    .slice(0, 15)
-    .map((d) => `${d.severity}: ${d.title} (${d.file}${d.line ? `:${d.line}` : ""})`);
-
-  const prompt = `You are a senior engineer. Given this technical debt summary, suggest 3–5 concrete, prioritized next steps the team should take to reduce debt. Be specific (files, types of fixes). Output ONLY a short bullet list: one action per line, starting each line with "- " or "• ". No preamble or explanation.
-
-Summary: ${fileCount} files, ${debtCount} debt items. By severity: ${JSON.stringify(bySeverity)}.
-Sample items: ${topItems.join("; ")}
-
-List 3–5 next steps:`;
+Output only:
+1. A two- to four-sentence summary of the main issues (strengths, concerns, single most important improvement). No code block unless absolutely necessary to demonstrate.
+2. On the next line write only one word: critical, high, medium, low, or none (overall codebase technical debt severity).
+3. On the line after that write only a number 0-100 (100 = most debt).
+No preamble.`;
 
   const raw = await chat(prompt, {
     ...resolved,
-    maxTokens: 300,
+    maxTokens: config.maxTokens ?? DEFAULT_MAX_TOKENS_OVERALL,
   });
   if (!raw) return null;
-  const bullets = raw
-    .split(/\n/)
-    .map((s) => s.replace(/^[\s\-•*]+\s*/, "").trim())
-    .filter((s) => s.length > 0)
-    .slice(0, 5);
-  return bullets.length > 0 ? bullets : null;
+  const lines = raw.trim().split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const parsed = parseSeverityAndScore(lines);
+  return {
+    assessment: parsed.assessment || raw.trim(),
+    score: parsed.score,
+    severity: parsed.severity,
+    raw,
+  };
 }
