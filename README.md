@@ -68,6 +68,8 @@ So: **static metrics + git → score & tier → optional LLM explanations and co
 | **Global (after publish)** | `npm install -g tech-debt-visualizer` then `tech-debt analyze [path]` |
 | **No install (after publish)** | `npx tech-debt-visualizer analyze [path]` |
 
+Use **`tech-debt-visualizer`** in the command (not `tech-debt`); `npx tech-debt` runs a different npm package. From this repo you can also run `npm run analyze` or `node dist/cli.js analyze .`.
+
 Requires **Node 18+**.
 
 ---

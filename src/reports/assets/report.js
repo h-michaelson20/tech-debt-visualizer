@@ -166,58 +166,82 @@ document.getElementById("q2").innerHTML = highImpact
   .map(function (d) { return '<li style="font-size:0.8rem">' + escapeHtml(d.file) + "</li>"; })
   .join("");
 
-// Debt list: static and LLM ratings side by side (LLM = file's rating, one per file)
+// Debt list: one row per file; static = worst severity across that file's issues, LLM = file's rating
 var sev = { critical: 4, high: 3, medium: 2, low: 1 };
 var list = document.getElementById("debtList");
-DATA.debtItems.sort(function (a, b) {
-  return (sev[b.severity] || 0) - (sev[a.severity] || 0);
-}).forEach(function (d) {
-  var li = document.createElement("li");
-  var fileM = DATA.fileMetrics.find(function (m) { return m.file === d.file; });
+var filesWithDebt = Array.from(debtByFile.keys()).sort(function (fa, fb) {
+  var itemsA = debtByFile.get(fa);
+  var itemsB = debtByFile.get(fb);
+  var worstA = itemsA.length ? Math.max.apply(null, itemsA.map(function (d) { return sev[d.severity] || 0; })) : 0;
+  var worstB = itemsB.length ? Math.max.apply(null, itemsB.map(function (d) { return sev[d.severity] || 0; })) : 0;
+  if (worstB !== worstA) return worstB - worstA;
+  return fa.localeCompare(fb);
+});
+filesWithDebt.forEach(function (file) {
+  var items = debtByFile.get(file);
+  var worstSeverityVal = items.length ? items.reduce(function (best, d) {
+    return (sev[d.severity] || 0) > (sev[best.severity] || 0) ? d : best;
+  }, items[0]) : null;
+  var staticSeverity = worstSeverityVal ? worstSeverityVal.severity : "low";
+  var fileM = DATA.fileMetrics.find(function (m) { return m.file === file; });
   var fileLlmSeverity = fileM && fileM.llmSeverity ? fileM.llmSeverity : null;
-  var staticBadge = '<span class="badge badge-' + d.severity + '" title="Static analysis">' + d.severity + "</span>";
+  var staticBadge = '<span class="badge badge-' + staticSeverity + '" title="Static analysis (worst of ' + items.length + ' issue(s))">' + staticSeverity + "</span>";
   var llmRating = fileLlmSeverity
     ? '<span class="badge badge-' + fileLlmSeverity + '" title="LLM rating for this file">' + fileLlmSeverity + "</span>"
     : '<span class="debt-list-llm-none">—</span>';
+  var titleText = items.length === 1
+    ? items[0].title
+    : worstSeverityVal.title + " (+" + (items.length - 1) + " more)";
   var ratingsRow =
     '<div class="debt-list-ratings">' +
     '<span class="debt-list-rating"><span class="debt-list-rating-label">Static</span> ' + staticBadge + "</span>" +
     '<span class="debt-list-rating"><span class="debt-list-rating-label">LLM</span> ' + llmRating + "</span>" +
     "</div>";
+  var li = document.createElement("li");
   li.innerHTML =
     '<span class="title">' +
-    escapeHtml(d.title) +
+    escapeHtml(titleText) +
     "</span> " +
     ratingsRow +
-    '<span class="meta">' +
-    escapeHtml(d.file) +
-    (d.line ? ":" + d.line : "") +
-    "</span>";
-  li.addEventListener("click", function () { showDetail(d.file, [d]); });
+    '<span class="meta">' + escapeHtml(file) + "</span>";
+  li.addEventListener("click", function () { showDetail(file, items); });
   list.appendChild(li);
 });
 
 function showDetail(file, items) {
   var panel = document.getElementById("detail");
-  var item = items.length ? items[0] : null;
   var fileMetric = DATA.fileMetrics.find(function (m) { return m.file === file; });
+  var worstItem = items.length ? items.reduce(function (best, d) {
+    return (sev[d.severity] || 0) > (sev[best.severity] || 0) ? d : best;
+  }, items[0]) : null;
+  var staticSeverity = worstItem ? worstItem.severity : "low";
 
-  document.getElementById("detailTitle").textContent = item ? item.title : "No debt items";
+  document.getElementById("detailTitle").textContent = items.length === 1
+    ? (items[0].title || "Debt item")
+    : items.length + " static issues";
   document.getElementById("detailFile").textContent = file;
 
   var explanationEl = document.getElementById("detailExplanation");
   var parts = [];
-  var staticSev = item ? item.severity : "—";
-  var llmSev = fileMetric && fileMetric.llmSeverity ? fileMetric.llmSeverity : "—";
   parts.push(
     '<div class="detail-severities">' +
-    '<span class="detail-sev"><strong>Static</strong> <span class="badge badge-' + (item ? item.severity : "low") + '">' + staticSev + "</span></span> " +
+    '<span class="detail-sev"><strong>Static</strong> <span class="badge badge-' + staticSeverity + '">' + staticSeverity + "</span> (worst of " + items.length + ")</span> " +
     '<span class="detail-sev"><strong>LLM</strong> ' +
     (fileMetric && fileMetric.llmSeverity ? '<span class="badge badge-' + fileMetric.llmSeverity + '">' + fileMetric.llmSeverity + "</span>" : "<span class=\"debt-list-llm-none\">—</span>") +
     "</span></div>"
   );
-  if (item && item.description)
-    parts.push('<div class="detail-static-desc"><strong>Static description</strong><br>' + escapeHtml(item.description).replace(/\n/g, "<br>") + "</div>");
+  parts.push('<div class="detail-static-desc"><strong>Static issues</strong><ul class="detail-issues-list">');
+  items.forEach(function (item) {
+    parts.push(
+      '<li><span class="badge badge-' + item.severity + '">' + item.severity + "</span> " +
+      escapeHtml(item.title || "Issue") +
+      (item.line ? " <span class=\"detail-line\">line " + item.line + "</span>" : "")
+    );
+    if (item.description)
+      parts.push('<div class="detail-issue-desc">' + escapeHtml(item.description).replace(/\n/g, "<br>") + "</div>");
+    parts.push("</li>");
+  });
+  parts.push("</ul></div>");
   parts.push('<div class="detail-llm-label"><strong>LLM assessment</strong></div>');
   if (fileMetric && (fileMetric.llmRawAssessment || fileMetric.llmAssessment)) {
     if (fileMetric.llmRawAssessment)

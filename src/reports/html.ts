@@ -103,20 +103,23 @@ function buildHtml(
   const tierColor = tierColors[cleanliness.tier] ?? "#666";
   const scoreBadgeSvg = buildScoreBadgeSvg(cleanliness.tier, tierColor);
 
-  const llmOverallSection =
+  const llmPanelHtml =
     run.llmOverallAssessment || run.llmOverallRaw
       ? `
-    <div class="section llm-overall">
-      <h2>LLM overall assessment</h2>
-      <div class="llm-output">${
-        run.llmOverallAssessment
-          ? renderLlmOutputToHtml(run.llmOverallAssessment)
-          : '<div class="llm-prose">' +
-            escapeHtml(stripTrailingSeverityAndScore(run.llmOverallRaw ?? "")).replace(/\n/g, "<br>") +
-            "</div>"
-      }</div>
-    </div>
-    `
+    <div class="panel panel-llm">
+      <div class="panel-header">
+        <h2 class="panel-title">LLM overall assessment</h2>
+      </div>
+      <div class="panel-body">
+        <div class="llm-output">${
+          run.llmOverallAssessment
+            ? renderLlmOutputToHtml(run.llmOverallAssessment)
+            : '<div class="llm-prose">' +
+              escapeHtml(stripTrailingSeverityAndScore(run.llmOverallRaw ?? "")).replace(/\n/g, "<br>") +
+              "</div>"
+        }</div>
+      </div>
+    </div>`
       : "";
 
   return `<!DOCTYPE html>
@@ -133,54 +136,113 @@ function buildHtml(
   <meta name="twitter:description" content="${escapeHtml(cleanliness.label)}: ${escapeHtml(cleanliness.description)}" />
   <style>${css}</style>
 </head>
-<body>
+<body class="dashboard-page">
   ${!hasLlm ? `<div class="no-llm-banner"><p class="no-llm-cta">Analysis run without LLM — for full results, run with LLM</p></div>` : ""}
-  <div class="container">
-    <p class="hero-caption">Technical Debt Cleanliness Score</p>
-    <div class="hero tier-${cleanliness.tier}">
-      <div class="score-badge" aria-label="Score ${cleanliness.tier} of 5">${scoreBadgeSvg}</div>
-      <div class="score-label">${escapeHtml(cleanliness.label)}</div>
-      <p class="score-desc">${escapeHtml(cleanliness.description)}</p>
-      <p class="report-meta">${escapeHtml(run.repoPath)} · ${run.completedAt ?? run.startedAt}</p>
+  <header class="dashboard-header">
+    <div class="dashboard-header-left">
+      <h1 class="dashboard-title">${escapeHtml(title)}</h1>
+      <span class="dashboard-meta">${escapeHtml(run.repoPath)}</span>
     </div>
-
-    <div class="summary-cards">
-      <div class="card"><div class="value">${run.fileMetrics.length}</div><div class="label">Files</div></div>
-      <div class="card"><div class="value">${run.debtItems.length}</div><div class="label">Debt items</div></div>
-      <div class="card"><div class="value">${highCriticalCount}</div><div class="label">High / Critical</div></div>
-      <div class="card"><div class="value">${hotspotCount}</div><div class="label">Hotspots</div></div>
-    </div>
-
-    ${llmOverallSection}
-
-    <div class="section">
-      <h2>Files by debt</h2>
-      <p class="section-desc">Size = complexity + churn. Color = LLM severity per file (when LLM used). Click for details.</p>
-      <div class="legend">
-        <span><span class="swatch swatch-crit"></span> Critical</span>
-        <span><span class="swatch swatch-high"></span> High</span>
-        <span><span class="swatch swatch-med"></span> Medium</span>
-        <span><span class="swatch swatch-low"></span> Low</span>
-        <span><span class="swatch swatch-none"></span> No debt</span>
+    <div class="dashboard-header-right">
+      <div class="dashboard-score tier-${cleanliness.tier}" aria-label="Score ${cleanliness.tier} of 5">
+        <span class="dashboard-score-value">${cleanliness.tier}</span>
+        <span class="dashboard-score-of">/ 5</span>
+        <span class="dashboard-score-label">${escapeHtml(cleanliness.label)}</span>
       </div>
-      <div id="treemap"></div>
+      <span class="dashboard-date">${run.completedAt ?? run.startedAt}</span>
     </div>
+  </header>
 
-    <div class="section">
-      <h2>Prioritized recommendations</h2>
-      <p class="section-desc">Focus on high-impact items first.</p>
-      <div class="priority-matrix">
-        <div class="quadrant"><h4>High impact, easier</h4><p>High severity in smaller files.</p><ul id="q1"></ul></div>
-        <div class="quadrant"><h4>High impact, harder</h4><p>Critical or hotspot files.</p><ul id="q2"></ul></div>
+  <main class="dashboard-main">
+    <div class="dashboard-grid dashboard-grid-stats">
+      <div class="panel stat-panel">
+        <div class="panel-body">
+          <div class="stat-value">${run.fileMetrics.length}</div>
+          <div class="stat-label">Files analyzed</div>
+        </div>
+      </div>
+      <div class="panel stat-panel">
+        <div class="panel-body">
+          <div class="stat-value">${run.debtItems.length}</div>
+          <div class="stat-label">Debt items</div>
+        </div>
+      </div>
+      <div class="panel stat-panel stat-panel-warn">
+        <div class="panel-body">
+          <div class="stat-value">${highCriticalCount}</div>
+          <div class="stat-label">High / Critical</div>
+        </div>
+      </div>
+      <div class="panel stat-panel">
+        <div class="panel-body">
+          <div class="stat-value">${hotspotCount}</div>
+          <div class="stat-label">Hotspots</div>
+        </div>
       </div>
     </div>
 
-    <div class="section">
-      <h2>All debt items</h2>
-      <p class="section-desc">Static (analysis) and LLM ratings shown side by side. Click a row for details.</p>
-      <ul class="debt-list" id="debtList"></ul>
+    <div class="dashboard-grid">
+      <div class="panel panel-score tier-${cleanliness.tier}">
+        <div class="panel-header">
+          <h2 class="panel-title">Cleanliness score</h2>
+        </div>
+        <div class="panel-body panel-body-center">
+          <div class="score-badge" aria-hidden="true">${scoreBadgeSvg}</div>
+          <p class="score-desc">${escapeHtml(cleanliness.description)}</p>
+        </div>
+      </div>
     </div>
-  </div>
+
+    ${llmPanelHtml}
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Files by debt</h2>
+        <p class="panel-desc">Size = complexity + churn. Color = LLM severity. Click for details.</p>
+      </div>
+      <div class="panel-body">
+        <div class="legend">
+          <span><span class="swatch swatch-crit"></span> Critical</span>
+          <span><span class="swatch swatch-high"></span> High</span>
+          <span><span class="swatch swatch-med"></span> Medium</span>
+          <span><span class="swatch swatch-low"></span> Low</span>
+          <span><span class="swatch swatch-none"></span> No debt</span>
+        </div>
+        <div id="treemap"></div>
+      </div>
+    </div>
+
+    <div class="dashboard-grid dashboard-grid-half">
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">High impact, easier</h2>
+          <p class="panel-desc">High severity in smaller files.</p>
+        </div>
+        <div class="panel-body">
+          <ul id="q1" class="priority-list"></ul>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">High impact, harder</h2>
+          <p class="panel-desc">Critical or hotspot files.</p>
+        </div>
+        <div class="panel-body">
+          <ul id="q2" class="priority-list"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">All debt items</h2>
+        <p class="panel-desc">Static and LLM ratings. Click a row for details.</p>
+      </div>
+      <div class="panel-body">
+        <ul class="debt-list" id="debtList"></ul>
+      </div>
+    </div>
+  </main>
 
   <div id="detail">
     <div class="panel">

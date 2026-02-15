@@ -100,9 +100,10 @@ export function resolveLLMConfig(config: LLMConfig = {}): {
   baseURL: string;
   model: string;
 } | null {
+  const trim = (s: string | undefined) => (typeof s === "string" ? s.trim() : undefined) || undefined;
   const explicitBase = (config.baseURL ?? process.env.OPENAI_BASE_URL)?.replace(/\/$/, "");
-  const cliKey = config.apiKey;
-  const openaiKey = cliKey ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  const cliKey = trim(config.apiKey);
+  const openaiKey = trim(cliKey ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY);
 
   if (explicitBase && openaiKey) {
     return {
@@ -131,20 +132,20 @@ export function resolveLLMConfig(config: LLMConfig = {}): {
     }
   }
 
-  if (cliKey ?? process.env.OPENROUTER_API_KEY) {
-    const key = cliKey ?? process.env.OPENROUTER_API_KEY!;
+  const openRouterKey = trim(cliKey ?? process.env.OPENROUTER_API_KEY);
+  if (openRouterKey) {
     return {
       provider: "openrouter",
-      apiKey: key,
+      apiKey: openRouterKey,
       baseURL: config.baseURL ?? process.env.OPENROUTER_BASE_URL ?? OPENROUTER_BASE,
       model: config.model ?? process.env.OPENROUTER_MODEL ?? OPENROUTER_DEFAULT_MODEL,
     };
   }
-  if (cliKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY) {
-    const key = cliKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY!;
+  const geminiKey = trim(cliKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY);
+  if (geminiKey) {
     return {
       provider: "gemini",
-      apiKey: key,
+      apiKey: geminiKey,
       baseURL: GEMINI_BASE,
       model: config.model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL,
     };
