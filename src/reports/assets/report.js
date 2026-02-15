@@ -166,44 +166,81 @@ document.getElementById("q2").innerHTML = highImpact
   .map(function (d) { return '<li style="font-size:0.8rem">' + escapeHtml(d.file) + "</li>"; })
   .join("");
 
-// Debt list: one row per file; static = worst severity across that file's issues, LLM = file's rating
-var sev = { critical: 4, high: 3, medium: 2, low: 1 };
+// Debt list: every file rated above none by static OR LLM; show both ratings and short explanation
+var sev = { critical: 4, high: 3, medium: 2, low: 1, none: 0 };
 var list = document.getElementById("debtList");
-var filesWithDebt = Array.from(debtByFile.keys()).sort(function (fa, fb) {
-  var itemsA = debtByFile.get(fa);
-  var itemsB = debtByFile.get(fb);
-  var worstA = itemsA.length ? Math.max.apply(null, itemsA.map(function (d) { return sev[d.severity] || 0; })) : 0;
-  var worstB = itemsB.length ? Math.max.apply(null, itemsB.map(function (d) { return sev[d.severity] || 0; })) : 0;
+
+function severityNum(s) { return sev[s] || 0; }
+function fileWorstStatic(items) {
+  if (!items || !items.length) return 0;
+  return Math.max.apply(null, items.map(function (d) { return severityNum(d.severity); }));
+}
+function fileWorstLlm(metric) {
+  if (!metric || !metric.llmSeverity || metric.llmSeverity === "none") return 0;
+  return severityNum(metric.llmSeverity);
+}
+
+var filesFromStatic = new Set(debtByFile.keys());
+var filesFromLlm = new Set();
+DATA.fileMetrics.forEach(function (m) {
+  if (m.llmSeverity && m.llmSeverity !== "none") filesFromLlm.add(m.file);
+});
+var fileSet = new Set([].concat(Array.from(filesFromStatic), Array.from(filesFromLlm)));
+
+var filesWithDebt = Array.from(fileSet).sort(function (fa, fb) {
+  var itemsA = debtByFile.get(fa) || [];
+  var itemsB = debtByFile.get(fb) || [];
+  var metricA = DATA.fileMetrics.find(function (m) { return m.file === fa; });
+  var metricB = DATA.fileMetrics.find(function (m) { return m.file === fb; });
+  var worstA = Math.max(fileWorstStatic(itemsA), fileWorstLlm(metricA));
+  var worstB = Math.max(fileWorstStatic(itemsB), fileWorstLlm(metricB));
   if (worstB !== worstA) return worstB - worstA;
   return fa.localeCompare(fb);
 });
+
+function firstLine(text) {
+  if (!text || !String(text).trim()) return "";
+  return String(text).trim().split(/\n/)[0].trim().slice(0, 120);
+}
+
 filesWithDebt.forEach(function (file) {
-  var items = debtByFile.get(file);
-  var worstSeverityVal = items.length ? items.reduce(function (best, d) {
-    return (sev[d.severity] || 0) > (sev[best.severity] || 0) ? d : best;
-  }, items[0]) : null;
-  var staticSeverity = worstSeverityVal ? worstSeverityVal.severity : "low";
+  var items = debtByFile.get(file) || [];
   var fileM = DATA.fileMetrics.find(function (m) { return m.file === file; });
-  var fileLlmSeverity = fileM && fileM.llmSeverity ? fileM.llmSeverity : null;
-  var staticBadge = '<span class="badge badge-' + staticSeverity + '" title="Static analysis (worst of ' + items.length + ' issue(s))">' + staticSeverity + "</span>";
-  var llmRating = fileLlmSeverity
-    ? '<span class="badge badge-' + fileLlmSeverity + '" title="LLM rating for this file">' + fileLlmSeverity + "</span>"
+  var worstSeverityVal = items.length ? items.reduce(function (best, d) {
+    return severityNum(d.severity) > severityNum(best.severity) ? d : best;
+  }, items[0]) : null;
+  var staticSeverity = worstSeverityVal ? worstSeverityVal.severity : null;
+  var fileLlmSeverity = fileM && fileM.llmSeverity && fileM.llmSeverity !== "none" ? fileM.llmSeverity : null;
+
+  var staticBadge = staticSeverity
+    ? '<span class="badge badge-' + staticSeverity + '" title="Static (worst of ' + items.length + ')">' + staticSeverity + "</span>"
     : '<span class="debt-list-llm-none">—</span>';
-  var titleText = items.length === 1
-    ? items[0].title
-    : worstSeverityVal.title + " (+" + (items.length - 1) + " more)";
+  var llmBadge = fileLlmSeverity
+    ? '<span class="badge badge-' + fileLlmSeverity + '" title="LLM">' + fileLlmSeverity + "</span>"
+    : '<span class="debt-list-llm-none">—</span>';
+
+  var explanation = "";
+  if (items.length && worstSeverityVal) {
+    explanation = escapeHtml(firstLine(worstSeverityVal.title || worstSeverityVal.description || ""));
+    if (items.length > 1) explanation += " (+" + (items.length - 1) + " more)";
+  }
+  if (fileM && (fileM.llmAssessment || fileM.llmRawAssessment)) {
+    var llmBlurb = firstLine(stripTrailingSeverityAndScore(fileM.llmRawAssessment || fileM.llmAssessment || ""));
+    if (llmBlurb) explanation = explanation ? explanation + " · " + escapeHtml(llmBlurb) : escapeHtml(llmBlurb);
+  }
+  if (!explanation) explanation = "Rated by static or LLM.";
+
   var ratingsRow =
     '<div class="debt-list-ratings">' +
     '<span class="debt-list-rating"><span class="debt-list-rating-label">Static</span> ' + staticBadge + "</span>" +
-    '<span class="debt-list-rating"><span class="debt-list-rating-label">LLM</span> ' + llmRating + "</span>" +
+    '<span class="debt-list-rating"><span class="debt-list-rating-label">LLM</span> ' + llmBadge + "</span>" +
     "</div>";
   var li = document.createElement("li");
   li.innerHTML =
-    '<span class="title">' +
-    escapeHtml(titleText) +
-    "</span> " +
+    '<span class="title">' + escapeHtml(file.split("/").pop() || file) + "</span> " +
     ratingsRow +
-    '<span class="meta">' + escapeHtml(file) + "</span>";
+    '<span class="meta">' + escapeHtml(file) + "</span>" +
+    '<p class="debt-list-explanation">' + explanation + "</p>";
   li.addEventListener("click", function () { showDetail(file, items); });
   list.appendChild(li);
 });
@@ -212,35 +249,44 @@ function showDetail(file, items) {
   var panel = document.getElementById("detail");
   var fileMetric = DATA.fileMetrics.find(function (m) { return m.file === file; });
   var worstItem = items.length ? items.reduce(function (best, d) {
-    return (sev[d.severity] || 0) > (sev[best.severity] || 0) ? d : best;
+    return severityNum(d.severity) > severityNum(best.severity) ? d : best;
   }, items[0]) : null;
-  var staticSeverity = worstItem ? worstItem.severity : "low";
+  var staticSeverity = worstItem ? worstItem.severity : null;
 
-  document.getElementById("detailTitle").textContent = items.length === 1
+  var titleText = items.length === 1
     ? (items[0].title || "Debt item")
-    : items.length + " static issues";
+    : items.length > 1
+      ? items.length + " static issues"
+      : (fileMetric && fileMetric.llmSeverity ? "LLM assessment" : "File details");
+  document.getElementById("detailTitle").textContent = titleText;
   document.getElementById("detailFile").textContent = file;
 
   var explanationEl = document.getElementById("detailExplanation");
   var parts = [];
   parts.push(
     '<div class="detail-severities">' +
-    '<span class="detail-sev"><strong>Static</strong> <span class="badge badge-' + staticSeverity + '">' + staticSeverity + "</span> (worst of " + items.length + ")</span> " +
+    '<span class="detail-sev"><strong>Static</strong> ' +
+    (staticSeverity ? '<span class="badge badge-' + staticSeverity + '">' + staticSeverity + "</span> (worst of " + items.length + ")" : "<span class=\"debt-list-llm-none\">\u2014</span>") +
+    "</span> " +
     '<span class="detail-sev"><strong>LLM</strong> ' +
-    (fileMetric && fileMetric.llmSeverity ? '<span class="badge badge-' + fileMetric.llmSeverity + '">' + fileMetric.llmSeverity + "</span>" : "<span class=\"debt-list-llm-none\">—</span>") +
+    (fileMetric && fileMetric.llmSeverity && fileMetric.llmSeverity !== "none" ? '<span class="badge badge-' + fileMetric.llmSeverity + '">' + fileMetric.llmSeverity + "</span>" : "<span class=\"debt-list-llm-none\">\u2014</span>") +
     "</span></div>"
   );
   parts.push('<div class="detail-static-desc"><strong>Static issues</strong><ul class="detail-issues-list">');
-  items.forEach(function (item) {
-    parts.push(
-      '<li><span class="badge badge-' + item.severity + '">' + item.severity + "</span> " +
-      escapeHtml(item.title || "Issue") +
-      (item.line ? " <span class=\"detail-line\">line " + item.line + "</span>" : "")
-    );
-    if (item.description)
-      parts.push('<div class="detail-issue-desc">' + escapeHtml(item.description).replace(/\n/g, "<br>") + "</div>");
-    parts.push("</li>");
-  });
+  if (items.length) {
+    items.forEach(function (item) {
+      parts.push(
+        '<li><span class="badge badge-' + item.severity + '">' + item.severity + "</span> " +
+        escapeHtml(item.title || "Issue") +
+        (item.line ? " <span class=\"detail-line\">line " + item.line + "</span>" : "")
+      );
+      if (item.description)
+        parts.push('<div class="detail-issue-desc">' + escapeHtml(item.description).replace(/\n/g, "<br>") + "</div>");
+      parts.push("</li>");
+    });
+  } else {
+    parts.push("<li class=\"detail-no-llm\">No static issues for this file.</li>");
+  }
   parts.push("</ul></div>");
   parts.push('<div class="detail-llm-label"><strong>LLM assessment</strong></div>');
   if (fileMetric && (fileMetric.llmRawAssessment || fileMetric.llmAssessment)) {

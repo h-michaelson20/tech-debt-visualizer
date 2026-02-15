@@ -46,11 +46,11 @@ body.dashboard-page {
 /* ——— Dashboard header (Grafana-style top bar) ——— */
 .dashboard-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0.75rem 1.5rem;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   position: sticky;
@@ -60,75 +60,69 @@ body.dashboard-page {
 
 .dashboard-header-left {
   display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
+  align-items: flex-start;
+  gap: 1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.dashboard-score-badge {
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.dashboard-score-badge .score-badge-svg {
+  width: 56px;
+  height: auto;
+  display: block;
+}
+
+.dashboard-score-badge .score-badge-num { font-size: 22px; }
+.dashboard-score-badge .score-badge-of { font-size: 9px; }
+
+.dashboard-hero {
   min-width: 0;
 }
 
 .dashboard-title {
-  margin: 0;
+  margin: 0 0 0.25rem;
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.dashboard-blurb {
+  margin: 0 0 0.35rem;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  max-width: 42em;
 }
 
 .dashboard-meta {
   font-size: 12px;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .dashboard-header-right {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
   flex-shrink: 0;
 }
 
-.dashboard-score {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.2rem;
-  padding: 0.35rem 0.65rem;
-  border-radius: var(--radius);
-  font-weight: 600;
-}
-
-.dashboard-score-value {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.dashboard-score-of {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-.dashboard-score-label {
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-left: 0.35rem;
-  opacity: 0.95;
-}
-
-.dashboard-score.tier-1 { background: rgba(204, 0, 0, 0.2); color: #f66; }
-.dashboard-score.tier-2 { background: rgba(232, 93, 0, 0.2); color: #f90; }
-.dashboard-score.tier-3 { background: rgba(184, 134, 11, 0.2); color: #db9; }
-.dashboard-score.tier-4 { background: rgba(0, 102, 153, 0.2); color: #6cf; }
-.dashboard-score.tier-5 { background: rgba(10, 107, 10, 0.2); color: #6c6; }
-
-.dashboard-date {
+.dashboard-stats {
   font-size: 12px;
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dashboard-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.9;
 }
 
 /* ——— Main content & grid ——— */
@@ -144,23 +138,17 @@ body.dashboard-page {
   margin-bottom: 1rem;
 }
 
-.dashboard-grid-stats {
-  grid-template-columns: repeat(4, 1fr);
-}
-
 .dashboard-grid-half {
   grid-template-columns: repeat(2, 1fr);
 }
 
 @media (max-width: 900px) {
-  .dashboard-grid-stats { grid-template-columns: repeat(2, 1fr); }
   .dashboard-grid-half { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
-  .dashboard-header { padding: 0.6rem 1rem; }
+  .dashboard-header { padding: 0.75rem 1rem; }
   .dashboard-main { padding: 1rem; }
-  .dashboard-grid-stats { grid-template-columns: 1fr; }
 }
 
 /* ——— Panels (Grafana-style) ——— */
@@ -205,69 +193,29 @@ body.dashboard-page {
   text-align: center;
 }
 
-/* Stat panels (KPI row) */
-.stat-panel .panel-body {
-  padding: 1rem 1.25rem;
+/* ——— Heatmap panel ——— */
+.panel-heatmap .panel-header-heatmap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1.25rem;
 }
 
-.stat-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--text);
-  letter-spacing: -0.02em;
-}
+.panel-heatmap .panel-title { margin-right: 0.5rem; }
+.panel-heatmap .panel-desc { margin: 0.15rem 0 0; flex-basis: 100%; }
 
-.stat-label {
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  margin-top: 0.25rem;
-}
-
-.stat-panel-warn .stat-value { color: #f44; }
-
-/* Score panel (cleanliness gauge) */
-.panel-score .panel-body-center {
-  padding: 1.25rem 1rem;
-}
-
-.panel-score .score-badge {
-  display: inline-block;
-  margin-bottom: 0.75rem;
-  line-height: 0;
-}
-
-.panel-score .score-badge-svg {
-  display: block;
-  width: 120px;
-  height: auto;
-}
-
-.panel-score .score-badge-svg .score-badge-num {
-  font-size: 42px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.panel-score .score-badge-svg .score-badge-of {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.95;
-}
-
-.panel-score .score-desc {
-  font-size: 13px;
-  color: var(--text-muted);
+.legend-inline {
   margin: 0;
-  max-width: 320px;
   margin-left: auto;
-  margin-right: auto;
-  line-height: 1.45;
+}
+
+.panel-body-heatmap {
+  padding: 1rem;
+  padding-top: 0.5rem;
+}
+
+.panel-body-heatmap #treemap {
+  border-radius: var(--radius);
 }
 
 /* LLM panel accent */
@@ -379,8 +327,18 @@ body.dashboard-page {
 
 .debt-list .title { font-weight: 600; margin-bottom: 0.2rem; }
 .debt-list .meta { font-size: 12px; color: var(--text-muted); display: block; margin-top: 0.25rem; font-family: ui-monospace, monospace; }
+.debt-list-explanation {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0.35rem 0 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .debt-list .insight { font-size: 13px; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
-.debt-list-ratings { display: flex; align-items: center; gap: 1rem; margin: 0.25rem 0; flex-wrap: wrap; }
+.debt-list-ratings { display: flex; align-items: center; gap: 1rem; margin: 0.25rem 0 0; flex-wrap: wrap; }
 .debt-list-rating { display: inline-flex; align-items: center; gap: 0.35rem; }
 .debt-list-rating-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); }
 .debt-list-llm-none { color: var(--text-muted); font-size: 12px; }

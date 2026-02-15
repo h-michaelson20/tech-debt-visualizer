@@ -122,6 +122,8 @@ function buildHtml(
     </div>`
       : "";
 
+  const statsLine = `${run.fileMetrics.length} files · ${run.debtItems.length} items · ${highCriticalCount} high/crit · ${hotspotCount} hotspots`;
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="${theme}">
 <head>
@@ -140,74 +142,35 @@ function buildHtml(
   ${!hasLlm ? `<div class="no-llm-banner"><p class="no-llm-cta">Analysis run without LLM — for full results, run with LLM</p></div>` : ""}
   <header class="dashboard-header">
     <div class="dashboard-header-left">
-      <h1 class="dashboard-title">${escapeHtml(title)}</h1>
-      <span class="dashboard-meta">${escapeHtml(run.repoPath)}</span>
+      <div class="dashboard-score-badge tier-${cleanliness.tier}" aria-label="Score ${cleanliness.tier} of 5">${scoreBadgeSvg}</div>
+      <div class="dashboard-hero">
+        <h1 class="dashboard-title">${escapeHtml(title)}</h1>
+        <p class="dashboard-blurb">${escapeHtml(cleanliness.description)}</p>
+        <span class="dashboard-meta">${escapeHtml(run.repoPath)}</span>
+      </div>
     </div>
     <div class="dashboard-header-right">
-      <div class="dashboard-score tier-${cleanliness.tier}" aria-label="Score ${cleanliness.tier} of 5">
-        <span class="dashboard-score-value">${cleanliness.tier}</span>
-        <span class="dashboard-score-of">/ 5</span>
-        <span class="dashboard-score-label">${escapeHtml(cleanliness.label)}</span>
-      </div>
+      <span class="dashboard-stats">${statsLine}</span>
       <span class="dashboard-date">${run.completedAt ?? run.startedAt}</span>
     </div>
   </header>
 
   <main class="dashboard-main">
-    <div class="dashboard-grid dashboard-grid-stats">
-      <div class="panel stat-panel">
-        <div class="panel-body">
-          <div class="stat-value">${run.fileMetrics.length}</div>
-          <div class="stat-label">Files analyzed</div>
-        </div>
-      </div>
-      <div class="panel stat-panel">
-        <div class="panel-body">
-          <div class="stat-value">${run.debtItems.length}</div>
-          <div class="stat-label">Debt items</div>
-        </div>
-      </div>
-      <div class="panel stat-panel stat-panel-warn">
-        <div class="panel-body">
-          <div class="stat-value">${highCriticalCount}</div>
-          <div class="stat-label">High / Critical</div>
-        </div>
-      </div>
-      <div class="panel stat-panel">
-        <div class="panel-body">
-          <div class="stat-value">${hotspotCount}</div>
-          <div class="stat-label">Hotspots</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="dashboard-grid">
-      <div class="panel panel-score tier-${cleanliness.tier}">
-        <div class="panel-header">
-          <h2 class="panel-title">Cleanliness score</h2>
-        </div>
-        <div class="panel-body panel-body-center">
-          <div class="score-badge" aria-hidden="true">${scoreBadgeSvg}</div>
-          <p class="score-desc">${escapeHtml(cleanliness.description)}</p>
-        </div>
-      </div>
-    </div>
-
     ${llmPanelHtml}
 
-    <div class="panel">
-      <div class="panel-header">
+    <div class="panel panel-heatmap">
+      <div class="panel-header panel-header-heatmap">
         <h2 class="panel-title">Files by debt</h2>
-        <p class="panel-desc">Size = complexity + churn. Color = LLM severity. Click for details.</p>
-      </div>
-      <div class="panel-body">
-        <div class="legend">
+        <p class="panel-desc">Size = complexity + churn. Color = severity (static or LLM). Click for details.</p>
+        <div class="legend legend-inline">
           <span><span class="swatch swatch-crit"></span> Critical</span>
           <span><span class="swatch swatch-high"></span> High</span>
           <span><span class="swatch swatch-med"></span> Medium</span>
           <span><span class="swatch swatch-low"></span> Low</span>
-          <span><span class="swatch swatch-none"></span> No debt</span>
+          <span><span class="swatch swatch-none"></span> None</span>
         </div>
+      </div>
+      <div class="panel-body panel-body-heatmap">
         <div id="treemap"></div>
       </div>
     </div>
@@ -235,8 +198,8 @@ function buildHtml(
 
     <div class="panel">
       <div class="panel-header">
-        <h2 class="panel-title">All debt items</h2>
-        <p class="panel-desc">Static and LLM ratings. Click a row for details.</p>
+        <h2 class="panel-title">Files with debt (static or LLM)</h2>
+        <p class="panel-desc">Every file rated above none by static analysis or LLM. Click a row for full ratings and explanations.</p>
       </div>
       <div class="panel-body">
         <ul class="debt-list" id="debtList"></ul>

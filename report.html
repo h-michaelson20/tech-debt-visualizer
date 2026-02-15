@@ -4,50 +4,290 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Technical Debt Report</title>
-  <meta property="og:title" content="Technical Debt Report — 2/5 Vibe Coding Hero" />
-  <meta property="og:description" content="&quot;Just make it work&quot; smashes accept button" />
+  <meta property="og:title" content="Technical Debt Report — 4/5 Power Tool User" />
+  <meta property="og:description" content="AI is the nail gun" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Technical Debt Report — 2/5" />
-  <meta name="twitter:description" content="Vibe Coding Hero: &quot;Just make it work&quot; smashes accept button" />
-  <style>/* Technical Debt Report - theme and layout */
+  <meta name="twitter:title" content="Technical Debt Report — 4/5" />
+  <meta name="twitter:description" content="Power Tool User: AI is the nail gun" />
+  <style>/* Technical Debt Report — Grafana-style dashboard */
 :root {
-  --bg: #fff;
-  --surface: #fff;
-  --border: #ccc;
-  --text: #222;
-  --text-muted: #666;
-  --link: #0568c2;
+  --bg: #0b0c0e;
+  --bg-elevated: #111214;
+  --surface: #181b1f;
+  --surface-hover: #1e2127;
+  --border: #2c3239;
+  --border-subtle: #252a30;
+  --text: #e8e9ea;
+  --text-muted: #8b9199;
+  --link: #5794f2;
+  --radius: 4px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-[data-theme="dark"] {
-  --bg: #1a1a1a;
-  --surface: #252525;
-  --border: #404040;
-  --text: #e0e0e0;
-  --text-muted: #999;
-  --link: #6eb3f7;
+[data-theme="light"] {
+  --bg: #f4f5f5;
+  --bg-elevated: #fff;
+  --surface: #fff;
+  --surface-hover: #f9fafb;
+  --border: #d8d9da;
+  --border-subtle: #e8e9ea;
+  --text: #1e2022;
+  --text-muted: #6b7077;
+  --link: #3274d9;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-.container {
-  max-width: 900px;
+body.dashboard-page {
+  padding-bottom: 2rem;
+}
+
+/* ——— Dashboard header (Grafana-style top bar) ——— */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.dashboard-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.dashboard-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.dashboard-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.dashboard-score-value {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.dashboard-score-of {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.dashboard-score-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 0.35rem;
+  opacity: 0.95;
+}
+
+.dashboard-score.tier-1 { background: rgba(204, 0, 0, 0.2); color: #f66; }
+.dashboard-score.tier-2 { background: rgba(232, 93, 0, 0.2); color: #f90; }
+.dashboard-score.tier-3 { background: rgba(184, 134, 11, 0.2); color: #db9; }
+.dashboard-score.tier-4 { background: rgba(0, 102, 153, 0.2); color: #6cf; }
+.dashboard-score.tier-5 { background: rgba(10, 107, 10, 0.2); color: #6c6; }
+
+.dashboard-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ——— Main content & grid ——— */
+.dashboard-main {
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 1.5rem 1.25rem;
+  padding: 1.25rem 1.5rem;
 }
 
-/* Banner */
+.dashboard-grid {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dashboard-grid-stats {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.dashboard-grid-half {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid-stats { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-grid-half { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .dashboard-header { padding: 0.6rem 1rem; }
+  .dashboard-main { padding: 1rem; }
+  .dashboard-grid-stats { grid-template-columns: 1fr; }
+}
+
+/* ——— Panels (Grafana-style) ——— */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .panel-header {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.panel-desc {
+  margin: 0.25rem 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.panel-body {
+  padding: 1rem;
+}
+
+.panel-body-center {
+  text-align: center;
+}
+
+/* Stat panels (KPI row) */
+.stat-panel .panel-body {
+  padding: 1rem 1.25rem;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.stat-panel-warn .stat-value { color: #f44; }
+
+/* Score panel (cleanliness gauge) */
+.panel-score .panel-body-center {
+  padding: 1.25rem 1rem;
+}
+
+.panel-score .score-badge {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  line-height: 0;
+}
+
+.panel-score .score-badge-svg {
+  display: block;
+  width: 120px;
+  height: auto;
+}
+
+.panel-score .score-badge-svg .score-badge-num {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.panel-score .score-badge-svg .score-badge-of {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.95;
+}
+
+.panel-score .score-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.45;
+}
+
+/* LLM panel accent */
+.panel-llm {
+  border-left: 3px solid var(--link);
+}
+
+/* ——— Banner ——— */
 .no-llm-banner {
   width: 100%;
   background: var(--surface);
@@ -57,97 +297,13 @@ body {
 }
 
 .no-llm-banner .no-llm-cta {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: normal;
-  color: var(--text);
+  color: var(--text-muted);
   margin: 0;
 }
 
-/* Hero / score */
-.hero-caption {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin: 0 0 0.5rem;
-  text-align: center;
-}
-
-.hero {
-  text-align: center;
-  margin-bottom: 1.5rem;
-}
-
-.score-badge {
-  display: inline-block;
-  margin-bottom: 0.75rem;
-  line-height: 0;
-}
-
-.score-badge-svg {
-  display: block;
-  width: 160px;
-  height: auto;
-  max-width: min(160px, 40vw);
-}
-
-.score-badge-svg .score-badge-num {
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 56px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.score-badge-svg .score-badge-of {
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.95;
-}
-
-.hero .score-label { font-size: 1.1rem; font-weight: bold; color: var(--text); margin: 0 0 0.2rem; }
-.hero .score-desc { font-size: 13px; color: var(--text-muted); margin: 0 0 0.35rem; max-width: 360px; margin-left: auto; margin-right: auto; }
-.hero .report-meta { font-size: 12px; color: var(--text-muted); }
-
-.hero.tier-1 { --tier-bg: #c00; --tier-num: #fff; }
-.hero.tier-2 { --tier-bg: #e85d00; --tier-num: #fff; }
-.hero.tier-3 { --tier-bg: #b8860b; --tier-num: #fff; }
-.hero.tier-4 { --tier-bg: #069; --tier-num: #fff; }
-.hero.tier-5 { --tier-bg: #0a6b0a; --tier-num: #fff; }
-
-/* Summary cards */
-.summary-cards {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
-@media (max-width: 640px) {
-  .summary-cards { grid-template-columns: repeat(2, 1fr); }
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 0.75rem 1rem;
-}
-
-.card .value { font-size: 1.35rem; font-weight: bold; color: var(--text); }
-.card .label { font-size: 12px; color: var(--text-muted); margin-top: 0.15rem; }
-
-/* Sections */
-.section {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.section h2 { font-size: 1rem; margin: 0 0 0.75rem; color: var(--text); font-weight: bold; }
-.section-desc { font-size: 13px; color: var(--text-muted); margin: -0.35rem 0 0.75rem; line-height: 1.4; }
-
-/* Treemap */
+/* ——— Treemap ——— */
 #treemap {
   display: flex;
   flex-wrap: wrap;
@@ -166,10 +322,14 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
 }
 
-.treemap-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
+.treemap-cell:hover {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
 
 .treemap-cell[data-severity="critical"] { background: #c00; color: #fff; border-color: #900; }
 .treemap-cell[data-severity="high"]    { background: #e85d00; color: #fff; border-color: #b84a00; }
@@ -177,37 +337,77 @@ body {
 .treemap-cell[data-severity="low"]     { background: #0a6b0a; color: #fff; border-color: #064906; }
 .treemap-cell[data-severity="none"]    { background: var(--border); color: var(--text-muted); border-color: var(--border); }
 
-/* Legend */
-.legend { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; font-size: 12px; color: var(--text-muted); }
-.legend span { display: inline-flex; align-items: center; gap: 0.25rem; }
-.legend .swatch { width: 10px; height: 10px; }
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend .swatch { width: 10px; height: 10px; border-radius: 2px; }
 .legend .swatch-crit { background: #c00; }
 .legend .swatch-high { background: #e85d00; }
 .legend .swatch-med { background: #b8860b; }
 .legend .swatch-low { background: #0a6b0a; }
 .legend .swatch-none { background: var(--border); }
 
-/* Debt list */
-.debt-list { list-style: none; padding: 0; margin: 0; }
+/* ——— Priority lists ——— */
+.priority-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+}
+
+.priority-list li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+}
+
+.priority-list li:last-child { border-bottom: none; }
+
+/* ——— Debt list ——— */
+.debt-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
 
 .debt-list li {
-  border-bottom: 1px solid var(--border);
-  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.65rem 0;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
 
 .debt-list li:last-child { border-bottom: none; }
-.debt-list li:hover { background: var(--bg); }
-.debt-list .title { font-weight: bold; margin-bottom: 0.2rem; }
-.debt-list .meta { font-size: 12px; color: var(--text-muted); display: block; margin-top: 0.2rem; }
+.debt-list li:hover { background: var(--surface-hover); }
+
+.debt-list .title { font-weight: 600; margin-bottom: 0.2rem; }
+.debt-list .meta { font-size: 12px; color: var(--text-muted); display: block; margin-top: 0.25rem; font-family: ui-monospace, monospace; }
 .debt-list .insight { font-size: 13px; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
 .debt-list-ratings { display: flex; align-items: center; gap: 1rem; margin: 0.25rem 0; flex-wrap: wrap; }
 .debt-list-rating { display: inline-flex; align-items: center; gap: 0.35rem; }
 .debt-list-rating-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); }
-.debt-list-llm-none { color: var(--text-muted); font-size: 13px; }
+.debt-list-llm-none { color: var(--text-muted); font-size: 12px; }
 
 /* Badges */
-.badge { display: inline-block; padding: 0.15em 0.4em; font-size: 11px; font-weight: bold; }
+.badge {
+  display: inline-block;
+  padding: 0.15em 0.45em;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 3px;
+}
+
 .badge-critical { background: #c00; color: #fff; }
 .badge-high { background: #e85d00; color: #fff; }
 .badge-medium { background: #b8860b; color: #fff; }
@@ -215,11 +415,11 @@ body {
 .badge-none { background: var(--border); color: var(--text-muted); }
 .badge-llm { background: var(--link); color: #fff; }
 
-/* Detail modal */
+/* ——— Detail modal ——— */
 #detail {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.55);
   display: none;
   align-items: center;
   justify-content: center;
@@ -232,7 +432,9 @@ body {
 #detail .panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  max-width: 520px;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  max-width: 540px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -241,7 +443,7 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-#detail .panel h3 { margin: 0 0 0.35rem; font-size: 1rem; }
+#detail .panel h3 { margin: 0 0 0.35rem; font-size: 14px; font-weight: 600; }
 #detail .panel .file { font-family: ui-monospace, monospace; font-size: 13px; color: var(--link); }
 #detail .panel .close-hint { margin-top: 0.75rem; font-size: 12px; color: var(--text-muted); }
 
@@ -262,6 +464,10 @@ body {
 #detail .panel .detail-explanation .detail-llm-label { margin-top: 0.5rem; margin-bottom: 0.25rem; }
 #detail .panel .detail-explanation .detail-no-llm { font-style: italic; color: var(--text-muted); }
 #detail .panel .detail-explanation .detail-static-desc { margin-top: 0.5rem; font-size: 12px; color: var(--text-muted); }
+#detail .panel .detail-explanation .detail-issues-list { margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style: none; }
+#detail .panel .detail-explanation .detail-issues-list > li { margin-bottom: 0.35rem; }
+#detail .panel .detail-explanation .detail-issues-list .detail-issue-desc { margin: 0.15rem 0 0 1rem; font-size: 11px; opacity: 0.9; }
+#detail .panel .detail-explanation .detail-issues-list .detail-line { color: var(--text-muted); font-size: 11px; }
 
 #detail .panel .file-assessment {
   margin-top: 0.75rem;
@@ -277,14 +483,14 @@ body {
 #detail .panel .file-assessment strong { color: var(--text); font-size: 12px; }
 #detail .panel .suggested-code { margin-top: 0.75rem; }
 
-/* Code blocks - shared */
+/* ——— Code blocks ——— */
 .code-block {
   margin: 0.5rem 0;
   padding: 0.75rem 1rem;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--radius);
+  font-size: 12px;
   overflow-x: auto;
   overflow-y: auto;
   max-height: 20em;
@@ -292,115 +498,162 @@ body {
 
 .code-block .lang-label {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   font-family: system-ui, sans-serif;
   color: var(--text-muted);
   margin-bottom: 0.5rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
 }
 
 .code-block pre { margin: 0; white-space: pre; overflow-x: auto; min-width: min-content; }
 .code-block code {
-  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text);
   display: block;
 }
 
-#detail .panel .code-block {
-  max-height: 16em;
-}
-
+#detail .panel .code-block { max-height: 16em; }
 #detail .panel .suggested-code .code-block { margin: 0.35rem 0 0; background: var(--surface); }
 #detail .panel .file-assessment .code-block { margin: 0.5rem 0 0; background: var(--surface); }
 
-/* LLM sections */
-.llm-overall { border-left: 3px solid var(--link); padding-left: 0.5rem; margin-left: -0.5rem; }
-.llm-overall h2 { color: var(--text); font-size: 1rem; }
-.llm-overall .llm-overall-text { margin: 0; color: var(--text); line-height: 1.5; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+/* ——— LLM output ——— */
+.llm-output .llm-prose {
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
 
-.llm-output .llm-prose { margin: 0 0 0.75rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .llm-output .llm-prose:last-child { margin-bottom: 0; }
 
-.llm-next-steps h2 { color: var(--text); font-size: 1rem; }
-.llm-next-steps ul { margin: 0; padding-left: 1.25rem; color: var(--text); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-
-/* Priority matrix */
-.priority-matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem; }
-.priority-matrix .quadrant { padding: 0.75rem; border: 1px solid var(--border); }
-.priority-matrix .quadrant h4 { margin: 0 0 0.35rem; font-size: 0.9rem; font-weight: bold; }
-.priority-matrix .quadrant p { margin: 0; font-size: 13px; color: var(--text-muted); }
+.panel-llm .panel-body .llm-output { margin: 0; }
 </style>
 </head>
-<body>
-  
-  <div class="container">
-    <p class="hero-caption">Technical Debt Cleanliness Score</p>
-    <div class="hero tier-2">
-      <div class="score-badge" aria-label="Score 2 of 5"><svg class="score-badge-svg" viewBox="0 0 140 168" xmlns="http://www.w3.org/2000/svg" role="img">
+<body class="dashboard-page">
+  <div class="no-llm-banner"><p class="no-llm-cta">Analysis run without LLM — for full results, run with LLM</p></div>
+  <header class="dashboard-header">
+    <div class="dashboard-header-left">
+      <h1 class="dashboard-title">Technical Debt Report</h1>
+      <span class="dashboard-meta">/Users/henry/Documents/tech-debt-visualizer</span>
+    </div>
+    <div class="dashboard-header-right">
+      <div class="dashboard-score tier-4" aria-label="Score 4 of 5">
+        <span class="dashboard-score-value">4</span>
+        <span class="dashboard-score-of">/ 5</span>
+        <span class="dashboard-score-label">Power Tool User</span>
+      </div>
+      <span class="dashboard-date">2026-02-15T01:57:21.051Z</span>
+    </div>
+  </header>
+
+  <main class="dashboard-main">
+    <div class="dashboard-grid dashboard-grid-stats">
+      <div class="panel stat-panel">
+        <div class="panel-body">
+          <div class="stat-value">20</div>
+          <div class="stat-label">Files analyzed</div>
+        </div>
+      </div>
+      <div class="panel stat-panel">
+        <div class="panel-body">
+          <div class="stat-value">14</div>
+          <div class="stat-label">Debt items</div>
+        </div>
+      </div>
+      <div class="panel stat-panel stat-panel-warn">
+        <div class="panel-body">
+          <div class="stat-value">3</div>
+          <div class="stat-label">High / Critical</div>
+        </div>
+      </div>
+      <div class="panel stat-panel">
+        <div class="panel-body">
+          <div class="stat-value">4</div>
+          <div class="stat-label">Hotspots</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="panel panel-score tier-4">
+        <div class="panel-header">
+          <h2 class="panel-title">Cleanliness score</h2>
+        </div>
+        <div class="panel-body panel-body-center">
+          <div class="score-badge" aria-hidden="true"><svg class="score-badge-svg" viewBox="0 0 140 168" xmlns="http://www.w3.org/2000/svg" role="img">
   <defs>
-    <linearGradient id="badge-shine-2" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#ff7900;stop-opacity:0.5" />
-      <stop offset="100%" style="stop-color:#e85d00;stop-opacity:1" />
+    <linearGradient id="badge-shine-4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#069;stop-opacity:0.5" />
+      <stop offset="100%" style="stop-color:#069;stop-opacity:1" />
     </linearGradient>
-    <filter id="badge-shadow-2" x="-30%" y="-20%" width="160%" height="150%">
+    <filter id="badge-shadow-4" x="-30%" y="-20%" width="160%" height="150%">
       <feDropShadow dx="0" dy="6" stdDeviation="8" flood-opacity="0.35"/>
     </filter>
   </defs>
-  <path fill="url(#badge-shine-2)" filter="url(#badge-shadow-2)" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
+  <path fill="url(#badge-shine-4)" filter="url(#badge-shadow-4)" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
   <path fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2.5" stroke-linejoin="round" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
-  <text x="70" y="78" text-anchor="middle" class="score-badge-num" fill="white">2</text>
+  <text x="70" y="78" text-anchor="middle" class="score-badge-num" fill="white">4</text>
   <text x="70" y="100" text-anchor="middle" class="score-badge-of" fill="white">of 5</text>
 </svg></div>
-      <div class="score-label">Vibe Coding Hero</div>
-      <p class="score-desc">&quot;Just make it work&quot; smashes accept button</p>
-      <p class="report-meta">/Users/henry/Documents/tech-debt-visualizer · 2026-02-12T02:29:33.846Z</p>
-    </div>
-
-    <div class="summary-cards">
-      <div class="card"><div class="value">20</div><div class="label">Files</div></div>
-      <div class="card"><div class="value">13</div><div class="label">Debt items</div></div>
-      <div class="card"><div class="value">3</div><div class="label">High / Critical</div></div>
-      <div class="card"><div class="value">5</div><div class="label">Hotspots</div></div>
-    </div>
-
-    
-    <div class="section llm-overall">
-      <h2>LLM overall assessment</h2>
-      <div class="llm-output"><div class="llm-prose">This 20-file codebase exhibits significant technical debt, with 13 debt items including 3 critical/high severity issues concentrated in 5 hotspots. Key functionalities like the CLI, LLM integration, various analyzers, and reporting modules are among the top risk files. The most important improvement is to prioritize resolving the critical/high debt items, especially within the identified hotspots and core components, to enhance stability and maintainability.</div></div>
-    </div>
-    
-
-    <div class="section">
-      <h2>Files by debt</h2>
-      <p class="section-desc">Size = complexity + churn. Color = LLM severity per file (when LLM used). Click for details.</p>
-      <div class="legend">
-        <span><span class="swatch swatch-crit"></span> Critical</span>
-        <span><span class="swatch swatch-high"></span> High</span>
-        <span><span class="swatch swatch-med"></span> Medium</span>
-        <span><span class="swatch swatch-low"></span> Low</span>
-        <span><span class="swatch swatch-none"></span> No debt</span>
-      </div>
-      <div id="treemap"></div>
-    </div>
-
-    <div class="section">
-      <h2>Prioritized recommendations</h2>
-      <p class="section-desc">Focus on high-impact items first.</p>
-      <div class="priority-matrix">
-        <div class="quadrant"><h4>High impact, easier</h4><p>High severity in smaller files.</p><ul id="q1"></ul></div>
-        <div class="quadrant"><h4>High impact, harder</h4><p>Critical or hotspot files.</p><ul id="q2"></ul></div>
+          <p class="score-desc">AI is the nail gun</p>
+        </div>
       </div>
     </div>
 
-    <div class="section">
-      <h2>All debt items</h2>
-      <p class="section-desc">Static (analysis) and LLM ratings shown side by side. Click a row for details.</p>
-      <ul class="debt-list" id="debtList"></ul>
+    
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Files by debt</h2>
+        <p class="panel-desc">Size = complexity + churn. Color = LLM severity. Click for details.</p>
+      </div>
+      <div class="panel-body">
+        <div class="legend">
+          <span><span class="swatch swatch-crit"></span> Critical</span>
+          <span><span class="swatch swatch-high"></span> High</span>
+          <span><span class="swatch swatch-med"></span> Medium</span>
+          <span><span class="swatch swatch-low"></span> Low</span>
+          <span><span class="swatch swatch-none"></span> No debt</span>
+        </div>
+        <div id="treemap"></div>
+      </div>
     </div>
-  </div>
+
+    <div class="dashboard-grid dashboard-grid-half">
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">High impact, easier</h2>
+          <p class="panel-desc">High severity in smaller files.</p>
+        </div>
+        <div class="panel-body">
+          <ul id="q1" class="priority-list"></ul>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">High impact, harder</h2>
+          <p class="panel-desc">Critical or hotspot files.</p>
+        </div>
+        <div class="panel-body">
+          <ul id="q2" class="priority-list"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">All debt items</h2>
+        <p class="panel-desc">Static and LLM ratings. Click a row for details.</p>
+      </div>
+      <div class="panel-body">
+        <ul class="debt-list" id="debtList"></ul>
+      </div>
+    </div>
+  </main>
 
   <div id="detail">
     <div class="panel">
@@ -414,7 +667,7 @@ body {
   </div>
 
   <script>
-const DATA = {"fileMetrics":[{"file":"src/cli.ts","language":"typescript","cyclomaticComplexity":47,"cognitiveComplexity":47,"lineCount":310,"hasDocumentation":true,"changeCount":4,"churn":460,"hotspotScore":0.8405797101449275,"llmAssessment":"This CLI entry point is a critical hotspot, frequently modified despite its very high complexity. It acts as a central orchestrator, pulling together numerous modules and handling extensive logic for argument parsing, analysis, LLM integration, and report generation. This tight coupling and excessive responsibility make the file difficult to understand, test, and maintain, significantly increasing the risk of bugs and slowing down development.","llmFileScore":85,"llmSeverity":"critical","llmRawAssessment":"This CLI entry point is a critical hotspot, frequently modified despite its very high complexity. It acts as a central orchestrator, pulling together numerous modules and handling extensive logic for argument parsing, analysis, LLM integration, and report generation. This tight coupling and excessive responsibility make the file difficult to understand, test, and maintain, significantly increasing the risk of bugs and slowing down development.\n\ncritical\n85"},{"file":"src/llm.ts","language":"typescript","cyclomaticComplexity":40,"cognitiveComplexity":40,"lineCount":367,"hasDocumentation":true,"changeCount":2,"churn":366,"hotspotScore":0.613768115942029,"llmAssessment":"This file manages integrations with various LLMs, handling configuration, default settings, and crucial parsing of LLM responses to extract structured data like code blocks, severity, and scores. Its high complexity (40) and line count (367), combined with being a hotspot, indicate it's a central and potentially over-burdened component. The intricate parsing logic for free-form LLM text is particularly complex and prone to brittleness, making it a significant source of technical debt.","llmFileScore":75,"llmSeverity":"high","llmRawAssessment":"This file manages integrations with various LLMs, handling configuration, default settings, and crucial parsing of LLM responses to extract structured data like code blocks, severity, and scores. Its high complexity (40) and line count (367), combined with being a hotspot, indicate it's a central and potentially over-burdened component. The intricate parsing logic for free-form LLM text is particularly complex and prone to brittleness, making it a significant source of technical debt.\n\nhigh\n75"},{"file":"src/reports/assets/report.js","language":"javascript","cyclomaticComplexity":69,"cognitiveComplexity":69,"lineCount":230,"hasDocumentation":false,"hotspotScore":0.5,"llmAssessment":"The `renderLlmOutput` function is excessively complex, combining parsing of LLM output with HTML generation and handling numerous edge cases for code blocks and prose. This makes it very difficult to read, maintain, and test. The script also relies on a global `DATA` variable, indicating poor modularity and reusability, and uses older `var` declarations.","llmFileScore":80,"llmSeverity":"high","llmRawAssessment":"The `renderLlmOutput` function is excessively complex, combining parsing of LLM output with HTML generation and handling numerous edge cases for code blocks and prose. This makes it very difficult to read, maintain, and test. The script also relies on a global `DATA` variable, indicating poor modularity and reusability, and uses older `var` declarations.\n\nhigh\n80"},{"file":"src/reports/html.ts","language":"typescript","cyclomaticComplexity":16,"cognitiveComplexity":16,"lineCount":261,"hasDocumentation":true,"changeCount":2,"churn":457,"hotspotScore":0.48931159420289855,"llmAssessment":"This file exhibits significant technical debt due to its high complexity (16) and large line count (261), primarily driven by the `buildHtml` function which likely generates the entire HTML report using string concatenation. This approach tightly couples HTML structure with TypeScript logic, making the report difficult to read, maintain, and extend. The file being a \"hotspot\" further suggests it's a frequent source of changes or issues, consistent with the challenges of this templating method.","llmFileScore":80,"llmSeverity":"high","llmRawAssessment":"This file exhibits significant technical debt due to its high complexity (16) and large line count (261), primarily driven by the `buildHtml` function which likely generates the entire HTML report using string concatenation. This approach tightly couples HTML structure with TypeScript logic, making the report difficult to read, maintain, and extend. The file being a \"hotspot\" further suggests it's a frequent source of changes or issues, consistent with the challenges of this templating method.\n\nhigh\n80"},{"file":"src/analyzers/javascript.ts","language":"typescript","cyclomaticComplexity":13,"cognitiveComplexity":13,"lineCount":136,"hasDocumentation":true,"changeCount":2,"churn":158,"hotspotScore":0.3050724637681159,"llmAssessment":"The file is generally well-structured and documented, with its current metrics (complexity 13, lines 136) indicating good health. However, the `getParser` function uses somewhat clunky type assertions, and the `analyze` method relies on hardcoded thresholds for debt detection, limiting its configurability. Given its high hotspot score, these minor maintainability issues are amplified.","llmFileScore":45,"llmSeverity":"medium","llmRawAssessment":"The file is generally well-structured and documented, with its current metrics (complexity 13, lines 136) indicating good health. However, the `getParser` function uses somewhat clunky type assertions, and the `analyze` method relies on hardcoded thresholds for debt detection, limiting its configurability. Given its high hotspot score, these minor maintainability issues are amplified.\n\nmedium\n45"},{"file":"src/analyzers/base.ts","language":"typescript","cyclomaticComplexity":15,"cognitiveComplexity":15,"lineCount":80,"hasDocumentation":true,"changeCount":2,"churn":104,"hotspotScore":0.2902173913043478,"llmAssessment":"The file provides well-documented and generally clear utility functions for AST analysis, including complexity calculation and debt item creation. The primary area for minor improvement is the `effectiveLines` function, whose comment filtering logic is somewhat simplistic and may not accurately exclude all types of comments, particularly multi-line block comments. Overall, the code is maintainable and serves its purpose effectively.","llmFileScore":25,"llmSeverity":"low","llmRawAssessment":"The file provides well-documented and generally clear utility functions for AST analysis, including complexity calculation and debt item creation. The primary area for minor improvement is the `effectiveLines` function, whose comment filtering logic is somewhat simplistic and may not accurately exclude all types of comments, particularly multi-line block comments. Overall, the code is maintainable and serves its purpose effectively.\nlow\n25"},{"file":"src/analyzers/python.ts","language":"typescript","cyclomaticComplexity":8,"cognitiveComplexity":8,"lineCount":128,"hasDocumentation":true,"changeCount":2,"churn":148,"hotspotScore":0.26340579710144923,"llmAssessment":"The `analyze` method in this file is long and combines multiple responsibilities, including parsing, calculating various metrics, and generating different types of technical debt items. This makes the method less modular and potentially harder to maintain or extend, especially given the file's identified hotspot status. While the overall file complexity is moderate, the core analysis logic could benefit from refactoring into smaller, more focused functions.","llmFileScore":55,"llmSeverity":"medium","llmRawAssessment":"The `analyze` method in this file is long and combines multiple responsibilities, including parsing, calculating various metrics, and generating different types of technical debt items. This makes the method less modular and potentially harder to maintain or extend, especially given the file's identified hotspot status. While the overall file complexity is moderate, the core analysis logic could benefit from refactoring into smaller, more focused functions.\n\nmedium\n55"},{"file":"src/git-analyzer.ts","language":"typescript","cyclomaticComplexity":15,"cognitiveComplexity":15,"lineCount":127,"hasDocumentation":true,"changeCount":1,"churn":162,"hotspotScore":0.2592391304347826,"llmAssessment":"The `getGitStats` function exhibits significant performance issues due to repeatedly querying git history and making N+1 calls to `git.show` within a loop for each commit. Error handling is overly broad and silent, which can mask critical issues and make debugging extremely difficult. The logic for collecting and combining file statistics could be streamlined for better efficiency and clarity.","llmFileScore":75,"llmSeverity":"high","llmRawAssessment":"The `getGitStats` function exhibits significant performance issues due to repeatedly querying git history and making N+1 calls to `git.show` within a loop for each commit. Error handling is overly broad and silent, which can mask critical issues and make debugging extremely difficult. The logic for collecting and combining file statistics could be streamlined for better efficiency and clarity.\nhigh\n75"},{"file":"src/reports/markdown.ts","language":"typescript","cyclomaticComplexity":4,"cognitiveComplexity":4,"lineCount":75,"hasDocumentation":false,"changeCount":2,"churn":89,"hotspotScore":0.2023550724637681,"llmAssessment":"This file is highly maintainable and clean, featuring a straightforward approach to generating a Markdown report. Its low complexity score and clear, linear structure make it easy to understand and modify. The primary area for improvement is the lack of module-level documentation, which is a minor oversight.","llmFileScore":10,"llmSeverity":"low","llmRawAssessment":"This file is highly maintainable and clean, featuring a straightforward approach to generating a Markdown report. Its low complexity score and clear, linear structure make it easy to understand and modify. The primary area for improvement is the lack of module-level documentation, which is a minor oversight.\n\nlow\n10"},{"file":"src/discover.ts","language":"typescript","cyclomaticComplexity":12,"cognitiveComplexity":12,"lineCount":71,"hasDocumentation":true,"changeCount":1,"churn":85,"hotspotScore":0.19565217391304346,"llmAssessment":"The code is well-structured and generally clean, effectively discovering files recursively while respecting ignore lists and file limits. Minor areas for future consideration include externalizing the language-to-extension mapping and making the default ignore list configurable, which would enhance flexibility for diverse project structures. The current implementation is robust for its stated purpose.","llmFileScore":20,"llmSeverity":"low","llmRawAssessment":"The code is well-structured and generally clean, effectively discovering files recursively while respecting ignore lists and file limits. Minor areas for future consideration include externalizing the language-to-extension mapping and making the default ignore list configurable, which would enhance flexibility for diverse project structures. The current implementation is robust for its stated purpose.\n\nlow\n20"},{"file":"src/types.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":107,"hasDocumentation":true,"changeCount":2,"churn":128,"hotspotScore":0.19456521739130433,"llmAssessment":"This file defines core types for a technical debt visualizer, including debt categories, severity levels, and interfaces for debt items, file metrics, and analysis results. The code is well-structured, clearly named, and appropriately documented with JSDoc comments for key types. It exhibits no logical complexity, duplication, or common code smells, serving as a clean and maintainable set of type definitions.","llmFileScore":5,"llmSeverity":"none","llmRawAssessment":"This file defines core types for a technical debt visualizer, including debt categories, severity levels, and interfaces for debt items, file metrics, and analysis results. The code is well-structured, clearly named, and appropriately documented with JSDoc comments for key types. It exhibits no logical complexity, duplication, or common code smells, serving as a clean and maintainable set of type definitions.\nnone\n5"},{"file":"src/engine.ts","language":"typescript","cyclomaticComplexity":4,"cognitiveComplexity":4,"lineCount":101,"hasDocumentation":true,"changeCount":1,"churn":118,"hotspotScore":0.15561594202898552,"llmAssessment":"The analysis engine effectively orchestrates file discovery, analyzer execution, and Git data integration. However, a key area for improvement lies in how `FileMetrics` are aggregated: the `allMetrics` array allows multiple entries for the same file path without a merging strategy. This could lead to redundant data in the final report and potentially confusing results when different analyzers process the same files.","llmFileScore":65,"llmSeverity":"medium","llmRawAssessment":"The analysis engine effectively orchestrates file discovery, analyzer execution, and Git data integration. However, a key area for improvement lies in how `FileMetrics` are aggregated: the `allMetrics` array allows multiple entries for the same file path without a merging strategy. This could lead to redundant data in the final report and potentially confusing results when different analyzers process the same files.\n\nmedium\n65"},{"file":"src/load-env.ts","language":"typescript","cyclomaticComplexity":9,"cognitiveComplexity":9,"lineCount":24,"hasDocumentation":true,"changeCount":1,"churn":29,"hotspotScore":0.14347826086956522,"llmAssessment":"The file implements a custom `.env` parser as a fallback if the `dotenv` library is not installed. This manual parsing logic is simplified, only handling basic key-value pairs, comments, and simple quotes, which means it lacks support for more advanced `.env` features like escaped characters, multi-line values, or variable expansion. This inconsistency with `dotenv`'s full capabilities introduces potential for subtle bugs and makes the code less robust and harder to maintain.","llmFileScore":65,"llmSeverity":"medium","llmRawAssessment":"The file implements a custom `.env` parser as a fallback if the `dotenv` library is not installed. This manual parsing logic is simplified, only handling basic key-value pairs, comments, and simple quotes, which means it lacks support for more advanced `.env` features like escaped characters, multi-line values, or variable expansion. This inconsistency with `dotenv`'s full capabilities introduces potential for subtle bugs and makes the code less robust and harder to maintain.\nmedium\n65"},{"file":"src/reports/json.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":23,"hasDocumentation":false,"changeCount":2,"churn":22,"hotspotScore":0.13695652173913042,"llmAssessment":"This file is exceptionally clean and maintainable, serving as a simple data serialization function. It directly maps properties from an input object to a JSON payload, with no complex logic, loops, or conditional statements. The code is highly readable and performs its intended task efficiently without introducing any technical debt.","llmFileScore":0,"llmSeverity":"none","llmRawAssessment":"This file is exceptionally clean and maintainable, serving as a simple data serialization function. It directly maps properties from an input object to a JSON payload, with no complex logic, loops, or conditional statements. The code is highly readable and performs its intended task efficiently without introducing any technical debt.\nnone\n0"},{"file":"src/cleanliness-score.ts","language":"typescript","cyclomaticComplexity":4,"cognitiveComplexity":4,"lineCount":20,"hasDocumentation":true,"changeCount":1,"churn":28,"hotspotScore":0.10670289855072464,"llmAssessment":"The code is generally clean, well-documented, and correctly implements the logic for mapping debt scores to cleanliness tiers. The primary area for minor improvement is the hardcoded score thresholds within the `getCleanlinessTier` function, which are tightly coupled to the `TIERS` array. This coupling could make future modifications to tier boundaries or the number of tiers slightly more error-prone, requiring updates in two separate places.","llmFileScore":10,"llmSeverity":"low","llmRawAssessment":"The code is generally clean, well-documented, and correctly implements the logic for mapping debt scores to cleanliness tiers. The primary area for minor improvement is the hardcoded score thresholds within the `getCleanlinessTier` function, which are tightly coupled to the `TIERS` array. This coupling could make future modifications to tier boundaries or the number of tiers slightly more error-prone, requiring updates in two separate places.\n\nlow\n10"},{"file":"src/cli-progress.d.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":19,"hasDocumentation":false,"changeCount":1,"churn":19,"hotspotScore":0.07282608695652174,"llmAssessment":"This TypeScript declaration file is clean, well-structured, and effectively defines the public API for the `cli-progress` module. As a type definition file, it contains no executable logic, so traditional code quality concerns like complexity or potential bugs are not applicable here. The definitions are clear and follow standard TypeScript practices, indicating high maintainability.","llmFileScore":0,"llmSeverity":"none","llmRawAssessment":"This TypeScript declaration file is clean, well-structured, and effectively defines the public API for the `cli-progress` module. As a type definition file, it contains no executable logic, so traditional code quality concerns like complexity or potential bugs are not applicable here. The definitions are clear and follow standard TypeScript practices, indicating high maintainability.\nnone\n0"},{"file":"src/index.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":13,"hasDocumentation":false,"changeCount":1,"churn":13,"hotspotScore":0.06956521739130435,"llmAssessment":"This file is a clean and highly maintainable re-export module, serving as the public API entry point for the library. It exhibits no functional issues or code complexity. The only minor concern is the absence of module-level documentation, which could slightly improve clarity regarding its purpose for new users or contributors.","llmFileScore":8,"llmSeverity":"low","llmRawAssessment":"This file is a clean and highly maintainable re-export module, serving as the public API entry point for the library. It exhibits no functional issues or code complexity. The only minor concern is the absence of module-level documentation, which could slightly improve clarity regarding its purpose for new users or contributors.\nlow\n8"},{"file":"src/analyzers/index.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":6,"hasDocumentation":false,"changeCount":1,"churn":8,"hotspotScore":0.06684782608695652,"llmAssessment":"This file is very clean and simple, primarily serving as an aggregation point for different analyzer modules. The main concern is the slight redundancy in re-exporting individual analyzers after importing them, though this is a common pattern for creating a unified API surface. Additionally, the lack of module-level documentation slightly hinders immediate understanding of its purpose without further context.","llmFileScore":15,"llmSeverity":"low","llmRawAssessment":"This file is very clean and simple, primarily serving as an aggregation point for different analyzer modules. The main concern is the slight redundancy in re-exporting individual analyzers after importing them, though this is a common pattern for creating a unified API surface. Additionally, the lack of module-level documentation slightly hinders immediate understanding of its purpose without further context.\nlow\n15"},{"file":"src/debt-score.ts","language":"typescript","cyclomaticComplexity":3,"cognitiveComplexity":3,"lineCount":21,"hasDocumentation":true,"hotspotScore":0.021739130434782608,"llmAssessment":"This file is very clean and highly maintainable, demonstrating clear logic for calculating a technical debt score from various sources (LLM or static analysis). It handles edge cases robustly, such as empty inputs and ensuring scores are within a valid range, with good use of JSDoc and descriptive variable names. No significant concerns regarding its quality or future maintainability are apparent.","llmFileScore":5,"llmSeverity":"none","llmRawAssessment":"This file is very clean and highly maintainable, demonstrating clear logic for calculating a technical debt score from various sources (LLM or static analysis). It handles edge cases robustly, such as empty inputs and ensuring scores are within a valid range, with good use of JSDoc and descriptive variable names. No significant concerns regarding its quality or future maintainability are apparent.\n\nnone\n5"},{"file":"scripts/copy-report-assets.mjs","language":"javascript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":8,"hasDocumentation":false,"hotspotScore":0,"llmAssessment":"This script is exceptionally clean, concise, and highly maintainable, effectively performing its asset copying task using modern Node.js APIs. Its simplicity means there are virtually no significant technical debt concerns. The only minor points are the absence of module-level documentation and explicit error handling, which are often acceptable for small build utilities.","llmFileScore":5,"llmSeverity":"none","llmRawAssessment":"This script is exceptionally clean, concise, and highly maintainable, effectively performing its asset copying task using modern Node.js APIs. Its simplicity means there are virtually no significant technical debt concerns. The only minor points are the absence of module-level documentation and explicit error handling, which are often acceptable for small build utilities.\nnone\n5"}],"debtItems":[{"id":"src/analyzers/base.ts:0:complexity:High_cyclomatic_complexity_(15","file":"src/analyzers/base.ts","category":"complexity","severity":"low","title":"High cyclomatic complexity (15)","description":"This file has 15 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":15}},{"id":"src/analyzers/base.ts:49:other:2_TODO/FIXME/HACK/XXX_marker(s","file":"src/analyzers/base.ts","line":49,"category":"other","severity":"low","title":"2 TODO/FIXME/HACK/XXX marker(s)","description":"Address or track these in issues: TODO L49, TODO L51.","confidence":0.75,"metrics":{"count":2}},{"id":"src/analyzers/javascript.ts:132:other:1_TODO/FIXME/HACK/XXX_marker(s","file":"src/analyzers/javascript.ts","line":132,"category":"other","severity":"low","title":"1 TODO/FIXME/HACK/XXX marker(s)","description":"Address or track these in issues: TODO L132.","confidence":0.75,"metrics":{"count":1}},{"id":"src/analyzers/python.ts:122:other:1_TODO/FIXME/HACK/XXX_marker(s","file":"src/analyzers/python.ts","line":122,"category":"other","severity":"low","title":"1 TODO/FIXME/HACK/XXX marker(s)","description":"Address or track these in issues: TODO L122.","confidence":0.75,"metrics":{"count":1}},{"id":"src/cli.ts:0:complexity:High_cyclomatic_complexity_(47","file":"src/cli.ts","category":"complexity","severity":"high","title":"High cyclomatic complexity (47)","description":"This file has 47 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":47}},{"id":"src/cli.ts:0:complexity:Large_file","file":"src/cli.ts","category":"complexity","severity":"medium","title":"Large file","description":"File has 310 effective lines. Consider splitting into smaller modules.","confidence":0.75,"metrics":{"lineCount":310}},{"id":"src/git-analyzer.ts:0:complexity:High_cyclomatic_complexity_(15","file":"src/git-analyzer.ts","category":"complexity","severity":"low","title":"High cyclomatic complexity (15)","description":"This file has 15 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":15}},{"id":"src/llm.ts:0:complexity:High_cyclomatic_complexity_(40","file":"src/llm.ts","category":"complexity","severity":"high","title":"High cyclomatic complexity (40)","description":"This file has 40 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":40}},{"id":"src/llm.ts:0:complexity:Large_file","file":"src/llm.ts","category":"complexity","severity":"medium","title":"Large file","description":"File has 367 effective lines. Consider splitting into smaller modules.","confidence":0.75,"metrics":{"lineCount":367}},{"id":"src/reports/assets/report.js:0:complexity:High_cyclomatic_complexity_(69","file":"src/reports/assets/report.js","category":"complexity","severity":"critical","title":"High cyclomatic complexity (69)","description":"This file has 69 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":69}},{"id":"src/reports/assets/report.js:0:documentation:Missing_module-level_documenta","file":"src/reports/assets/report.js","category":"documentation","severity":"medium","title":"Missing module-level documentation","description":"No JSDoc or file-level comment found. Document purpose and usage for maintainability.","confidence":0.7},{"id":"src/reports/html.ts:0:complexity:High_cyclomatic_complexity_(16","file":"src/reports/html.ts","category":"complexity","severity":"low","title":"High cyclomatic complexity (16)","description":"This file has 16 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":16}},{"id":"src/reports/markdown.ts:0:documentation:Missing_module-level_documenta","file":"src/reports/markdown.ts","category":"documentation","severity":"medium","title":"Missing module-level documentation","description":"No JSDoc or file-level comment found. Document purpose and usage for maintainability.","confidence":0.7}],"hasLlm":true,"llmOverallAssessment":"This 20-file codebase exhibits significant technical debt, with 13 debt items including 3 critical/high severity issues concentrated in 5 hotspots. Key functionalities like the CLI, LLM integration, various analyzers, and reporting modules are among the top risk files. The most important improvement is to prioritize resolving the critical/high debt items, especially within the identified hotspots and core components, to enhance stability and maintainability.","llmOverallRaw":"This 20-file codebase exhibits significant technical debt, with 13 debt items including 3 critical/high severity issues concentrated in 5 hotspots. Key functionalities like the CLI, LLM integration, various analyzers, and reporting modules are among the top risk files. The most important improvement is to prioritize resolving the critical/high debt items, especially within the identified hotspots and core components, to enhance stability and maintainability.\nhigh\n65","llmOverallSeverity":"high","summary":{"filesAnalyzed":20,"debtCount":13,"debtScore":65,"cleanlinessTier":2,"cleanlinessLabel":"Vibe Coding Hero","cleanlinessDescription":"\"Just make it work\" smashes accept button","repoPath":"/Users/henry/Documents/tech-debt-visualizer","completedAt":"2026-02-12T02:29:33.846Z"}};
+const DATA = {"fileMetrics":[{"file":"src/cli.ts","language":"typescript","cyclomaticComplexity":47,"cognitiveComplexity":47,"lineCount":312,"hasDocumentation":true,"changeCount":6,"churn":641,"hotspotScore":0.6921606171606172},{"file":"src/reports/assets/report.js","language":"javascript","cyclomaticComplexity":77,"cognitiveComplexity":77,"lineCount":254,"hasDocumentation":false,"changeCount":2,"churn":315,"hotspotScore":0.6506410256410257},{"file":"src/llm.ts","language":"typescript","cyclomaticComplexity":43,"cognitiveComplexity":43,"lineCount":377,"hasDocumentation":true,"changeCount":5,"churn":694,"hotspotScore":0.6358447108447108},{"file":"src/reports/html.ts","language":"typescript","cyclomaticComplexity":16,"cognitiveComplexity":16,"lineCount":322,"hasDocumentation":true,"changeCount":4,"churn":1170,"hotspotScore":0.5205627705627706},{"file":"src/git-analyzer.ts","language":"typescript","cyclomaticComplexity":15,"cognitiveComplexity":15,"lineCount":127,"hasDocumentation":true,"changeCount":2,"churn":163,"hotspotScore":0.21556499056499057},{"file":"src/analyzers/base.ts","language":"typescript","cyclomaticComplexity":15,"cognitiveComplexity":15,"lineCount":80,"hasDocumentation":true,"changeCount":2,"churn":104,"hotspotScore":0.20295815295815295},{"file":"src/analyzers/javascript.ts","language":"typescript","cyclomaticComplexity":13,"cognitiveComplexity":13,"lineCount":136,"hasDocumentation":true,"changeCount":2,"churn":158,"hotspotScore":0.2015096015096015},{"file":"src/reports/markdown.ts","language":"typescript","cyclomaticComplexity":4,"cognitiveComplexity":4,"lineCount":75,"hasDocumentation":false,"changeCount":3,"churn":101,"hotspotScore":0.17255522255522257},{"file":"src/analyzers/python.ts","language":"typescript","cyclomaticComplexity":8,"cognitiveComplexity":8,"lineCount":128,"hasDocumentation":true,"changeCount":2,"churn":148,"hotspotScore":0.1669053169053169},{"file":"src/types.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":107,"hasDocumentation":true,"changeCount":3,"churn":157,"hotspotScore":0.15854700854700854},{"file":"src/discover.ts","language":"typescript","cyclomaticComplexity":12,"cognitiveComplexity":12,"lineCount":71,"hasDocumentation":true,"changeCount":1,"churn":85,"hotspotScore":0.13775113775113773},{"file":"src/reports/json.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":23,"hasDocumentation":false,"changeCount":3,"churn":26,"hotspotScore":0.13055555555555556},{"file":"src/cleanliness-score.ts","language":"typescript","cyclomaticComplexity":4,"cognitiveComplexity":4,"lineCount":20,"hasDocumentation":true,"changeCount":2,"churn":38,"hotspotScore":0.11742701742701742},{"file":"src/load-env.ts","language":"typescript","cyclomaticComplexity":9,"cognitiveComplexity":9,"lineCount":24,"hasDocumentation":true,"changeCount":1,"churn":29,"hotspotScore":0.10630480630480629},{"file":"src/engine.ts","language":"typescript","cyclomaticComplexity":4,"cognitiveComplexity":4,"lineCount":101,"hasDocumentation":true,"changeCount":1,"churn":118,"hotspotScore":0.09285436785436785},{"file":"src/debt-score.ts","language":"typescript","cyclomaticComplexity":3,"cognitiveComplexity":3,"lineCount":21,"hasDocumentation":true,"changeCount":1,"churn":35,"hotspotScore":0.06862581862581862},{"file":"src/cli-progress.d.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":19,"hasDocumentation":false,"changeCount":1,"churn":19,"hotspotScore":0.045726495726495724},{"file":"src/index.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":13,"hasDocumentation":false,"changeCount":1,"churn":13,"hotspotScore":0.04444444444444444},{"file":"scripts/copy-report-assets.mjs","language":"javascript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":8,"hasDocumentation":false,"changeCount":1,"churn":10,"hotspotScore":0.0438034188034188},{"file":"src/analyzers/index.ts","language":"typescript","cyclomaticComplexity":0,"cognitiveComplexity":0,"lineCount":6,"hasDocumentation":false,"changeCount":1,"churn":8,"hotspotScore":0.043376068376068375}],"debtItems":[{"id":"src/analyzers/base.ts:0:complexity:High_cyclomatic_complexity_(15","file":"src/analyzers/base.ts","category":"complexity","severity":"low","title":"High cyclomatic complexity (15)","description":"This file has 15 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":15}},{"id":"src/analyzers/base.ts:49:other:2_TODO/FIXME/HACK/XXX_marker(s","file":"src/analyzers/base.ts","line":49,"category":"other","severity":"low","title":"2 TODO/FIXME/HACK/XXX marker(s)","description":"Address or track these in issues: TODO L49, TODO L51.","confidence":0.75,"metrics":{"count":2}},{"id":"src/analyzers/javascript.ts:132:other:1_TODO/FIXME/HACK/XXX_marker(s","file":"src/analyzers/javascript.ts","line":132,"category":"other","severity":"low","title":"1 TODO/FIXME/HACK/XXX marker(s)","description":"Address or track these in issues: TODO L132.","confidence":0.75,"metrics":{"count":1}},{"id":"src/analyzers/python.ts:122:other:1_TODO/FIXME/HACK/XXX_marker(s","file":"src/analyzers/python.ts","line":122,"category":"other","severity":"low","title":"1 TODO/FIXME/HACK/XXX marker(s)","description":"Address or track these in issues: TODO L122.","confidence":0.75,"metrics":{"count":1}},{"id":"src/cli.ts:0:complexity:High_cyclomatic_complexity_(47","file":"src/cli.ts","category":"complexity","severity":"high","title":"High cyclomatic complexity (47)","description":"This file has 47 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":47}},{"id":"src/cli.ts:0:complexity:Large_file","file":"src/cli.ts","category":"complexity","severity":"medium","title":"Large file","description":"File has 312 effective lines. Consider splitting into smaller modules.","confidence":0.75,"metrics":{"lineCount":312}},{"id":"src/git-analyzer.ts:0:complexity:High_cyclomatic_complexity_(15","file":"src/git-analyzer.ts","category":"complexity","severity":"low","title":"High cyclomatic complexity (15)","description":"This file has 15 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":15}},{"id":"src/llm.ts:0:complexity:High_cyclomatic_complexity_(43","file":"src/llm.ts","category":"complexity","severity":"high","title":"High cyclomatic complexity (43)","description":"This file has 43 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":43}},{"id":"src/llm.ts:0:complexity:Large_file","file":"src/llm.ts","category":"complexity","severity":"medium","title":"Large file","description":"File has 377 effective lines. Consider splitting into smaller modules.","confidence":0.75,"metrics":{"lineCount":377}},{"id":"src/reports/assets/report.js:0:complexity:High_cyclomatic_complexity_(77","file":"src/reports/assets/report.js","category":"complexity","severity":"critical","title":"High cyclomatic complexity (77)","description":"This file has 77 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":77}},{"id":"src/reports/assets/report.js:0:documentation:Missing_module-level_documenta","file":"src/reports/assets/report.js","category":"documentation","severity":"medium","title":"Missing module-level documentation","description":"No JSDoc or file-level comment found. Document purpose and usage for maintainability.","confidence":0.7},{"id":"src/reports/html.ts:0:complexity:High_cyclomatic_complexity_(16","file":"src/reports/html.ts","category":"complexity","severity":"low","title":"High cyclomatic complexity (16)","description":"This file has 16 decision points, which makes it harder to test and maintain.","confidence":0.85,"metrics":{"cyclomaticComplexity":16}},{"id":"src/reports/html.ts:0:complexity:Large_file","file":"src/reports/html.ts","category":"complexity","severity":"medium","title":"Large file","description":"File has 322 effective lines. Consider splitting into smaller modules.","confidence":0.75,"metrics":{"lineCount":322}},{"id":"src/reports/markdown.ts:0:documentation:Missing_module-level_documenta","file":"src/reports/markdown.ts","category":"documentation","severity":"medium","title":"Missing module-level documentation","description":"No JSDoc or file-level comment found. Document purpose and usage for maintainability.","confidence":0.7}],"hasLlm":false,"llmOverallAssessment":null,"llmOverallRaw":null,"llmOverallSeverity":null,"summary":{"filesAnalyzed":20,"debtCount":14,"debtScore":37,"cleanlinessTier":4,"cleanlinessLabel":"Power Tool User","cleanlinessDescription":"AI is the nail gun","repoPath":"/Users/henry/Documents/tech-debt-visualizer","completedAt":"2026-02-15T01:57:21.051Z"}};
 /* Report script: expects global DATA to be set before this runs */
 
 function escapeHtml(s) {
@@ -583,58 +836,82 @@ document.getElementById("q2").innerHTML = highImpact
   .map(function (d) { return '<li style="font-size:0.8rem">' + escapeHtml(d.file) + "</li>"; })
   .join("");
 
-// Debt list: static and LLM ratings side by side (LLM = file's rating, one per file)
+// Debt list: one row per file; static = worst severity across that file's issues, LLM = file's rating
 var sev = { critical: 4, high: 3, medium: 2, low: 1 };
 var list = document.getElementById("debtList");
-DATA.debtItems.sort(function (a, b) {
-  return (sev[b.severity] || 0) - (sev[a.severity] || 0);
-}).forEach(function (d) {
-  var li = document.createElement("li");
-  var fileM = DATA.fileMetrics.find(function (m) { return m.file === d.file; });
+var filesWithDebt = Array.from(debtByFile.keys()).sort(function (fa, fb) {
+  var itemsA = debtByFile.get(fa);
+  var itemsB = debtByFile.get(fb);
+  var worstA = itemsA.length ? Math.max.apply(null, itemsA.map(function (d) { return sev[d.severity] || 0; })) : 0;
+  var worstB = itemsB.length ? Math.max.apply(null, itemsB.map(function (d) { return sev[d.severity] || 0; })) : 0;
+  if (worstB !== worstA) return worstB - worstA;
+  return fa.localeCompare(fb);
+});
+filesWithDebt.forEach(function (file) {
+  var items = debtByFile.get(file);
+  var worstSeverityVal = items.length ? items.reduce(function (best, d) {
+    return (sev[d.severity] || 0) > (sev[best.severity] || 0) ? d : best;
+  }, items[0]) : null;
+  var staticSeverity = worstSeverityVal ? worstSeverityVal.severity : "low";
+  var fileM = DATA.fileMetrics.find(function (m) { return m.file === file; });
   var fileLlmSeverity = fileM && fileM.llmSeverity ? fileM.llmSeverity : null;
-  var staticBadge = '<span class="badge badge-' + d.severity + '" title="Static analysis">' + d.severity + "</span>";
+  var staticBadge = '<span class="badge badge-' + staticSeverity + '" title="Static analysis (worst of ' + items.length + ' issue(s))">' + staticSeverity + "</span>";
   var llmRating = fileLlmSeverity
     ? '<span class="badge badge-' + fileLlmSeverity + '" title="LLM rating for this file">' + fileLlmSeverity + "</span>"
     : '<span class="debt-list-llm-none">—</span>';
+  var titleText = items.length === 1
+    ? items[0].title
+    : worstSeverityVal.title + " (+" + (items.length - 1) + " more)";
   var ratingsRow =
     '<div class="debt-list-ratings">' +
     '<span class="debt-list-rating"><span class="debt-list-rating-label">Static</span> ' + staticBadge + "</span>" +
     '<span class="debt-list-rating"><span class="debt-list-rating-label">LLM</span> ' + llmRating + "</span>" +
     "</div>";
+  var li = document.createElement("li");
   li.innerHTML =
     '<span class="title">' +
-    escapeHtml(d.title) +
+    escapeHtml(titleText) +
     "</span> " +
     ratingsRow +
-    '<span class="meta">' +
-    escapeHtml(d.file) +
-    (d.line ? ":" + d.line : "") +
-    "</span>";
-  li.addEventListener("click", function () { showDetail(d.file, [d]); });
+    '<span class="meta">' + escapeHtml(file) + "</span>";
+  li.addEventListener("click", function () { showDetail(file, items); });
   list.appendChild(li);
 });
 
 function showDetail(file, items) {
   var panel = document.getElementById("detail");
-  var item = items.length ? items[0] : null;
   var fileMetric = DATA.fileMetrics.find(function (m) { return m.file === file; });
+  var worstItem = items.length ? items.reduce(function (best, d) {
+    return (sev[d.severity] || 0) > (sev[best.severity] || 0) ? d : best;
+  }, items[0]) : null;
+  var staticSeverity = worstItem ? worstItem.severity : "low";
 
-  document.getElementById("detailTitle").textContent = item ? item.title : "No debt items";
+  document.getElementById("detailTitle").textContent = items.length === 1
+    ? (items[0].title || "Debt item")
+    : items.length + " static issues";
   document.getElementById("detailFile").textContent = file;
 
   var explanationEl = document.getElementById("detailExplanation");
   var parts = [];
-  var staticSev = item ? item.severity : "—";
-  var llmSev = fileMetric && fileMetric.llmSeverity ? fileMetric.llmSeverity : "—";
   parts.push(
     '<div class="detail-severities">' +
-    '<span class="detail-sev"><strong>Static</strong> <span class="badge badge-' + (item ? item.severity : "low") + '">' + staticSev + "</span></span> " +
+    '<span class="detail-sev"><strong>Static</strong> <span class="badge badge-' + staticSeverity + '">' + staticSeverity + "</span> (worst of " + items.length + ")</span> " +
     '<span class="detail-sev"><strong>LLM</strong> ' +
     (fileMetric && fileMetric.llmSeverity ? '<span class="badge badge-' + fileMetric.llmSeverity + '">' + fileMetric.llmSeverity + "</span>" : "<span class=\"debt-list-llm-none\">—</span>") +
     "</span></div>"
   );
-  if (item && item.description)
-    parts.push('<div class="detail-static-desc"><strong>Static description</strong><br>' + escapeHtml(item.description).replace(/\n/g, "<br>") + "</div>");
+  parts.push('<div class="detail-static-desc"><strong>Static issues</strong><ul class="detail-issues-list">');
+  items.forEach(function (item) {
+    parts.push(
+      '<li><span class="badge badge-' + item.severity + '">' + item.severity + "</span> " +
+      escapeHtml(item.title || "Issue") +
+      (item.line ? " <span class=\"detail-line\">line " + item.line + "</span>" : "")
+    );
+    if (item.description)
+      parts.push('<div class="detail-issue-desc">' + escapeHtml(item.description).replace(/\n/g, "<br>") + "</div>");
+    parts.push("</li>");
+  });
+  parts.push("</ul></div>");
   parts.push('<div class="detail-llm-label"><strong>LLM assessment</strong></div>');
   if (fileMetric && (fileMetric.llmRawAssessment || fileMetric.llmAssessment)) {
     if (fileMetric.llmRawAssessment)
