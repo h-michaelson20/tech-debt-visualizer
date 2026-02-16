@@ -166,7 +166,7 @@ src/
 
 ---
 
-## Publishing (maintainers)
+## Publishing
 
 To publish this package to npm: see **[docs/PUBLISHING.md](docs/PUBLISHING.md)** for step-by-step instructions (login, build, publish, scoped name if needed).
 
