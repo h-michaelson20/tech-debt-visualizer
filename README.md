@@ -4,13 +4,10 @@
 
 Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional **AI explanations and refactor suggestions**—in the terminal or as an interactive HTML report.
 
-![GitHub stars](https://img.shields.io/github/stars/h-michaelson20/tech-debt-visualizer?style=social)
 ![npm version](https://img.shields.io/npm/v/tech-debt-visualizer)
 ![npm downloads](https://img.shields.io/npm/dm/tech-debt-visualizer)
 ![Node version](https://img.shields.io/node/v/tech-debt-visualizer)
-![License](https://img.shields.io/github/license/h-michaelson20/tech-debt-visualizer)
-![CI Status](https://img.shields.io/github/actions/workflow/status/h-michaelson20/tech-debt-visualizer/ci.yml?branch=main)
-![Issues](https://img.shields.io/github/issues/h-michaelson20/tech-debt-visualizer)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 
 ---
