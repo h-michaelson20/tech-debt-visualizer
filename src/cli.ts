@@ -10,7 +10,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import cliProgress from "cli-progress";
 import { getCleanlinessTier } from "./cleanliness-score.js";
-import { getDebtScore } from "./debt-score.js";
+import { getCleanlinessScore, getDebtScore } from "./debt-score.js";
 import { runAnalysis } from "./engine.js";
 import {
   assessFileCleanliness,
@@ -134,7 +134,8 @@ program
                     ...run.fileMetrics[idx]!,
                     llmAssessment: result.value.assessment,
                     llmSuggestedCode: result.value.suggestedCode,
-                    llmFileScore: result.value.fileScore,
+                    llmFileScore:
+                      result.value.fileScore != null ? 100 - result.value.fileScore : undefined,
                     llmSeverity: result.value.severity,
                     llmRawAssessment: result.value.raw,
                   };
@@ -151,7 +152,7 @@ program
           const overall = await assessOverallCleanliness(run, config);
           if (overall) {
             run.llmOverallAssessment = overall.assessment;
-            if (overall.score != null) run.llmOverallScore = overall.score;
+            if (overall.score != null) run.llmOverallScore = 100 - overall.score;
             if (overall.severity) run.llmOverallSeverity = overall.severity;
             run.llmOverallRaw = overall.raw;
           }
@@ -208,13 +209,13 @@ program
 
 function printCliReport(run: AnalysisRun, ci: boolean): void {
   const { debtItems, fileMetrics, errors } = run;
-  const score = getDebtScore(run);
-  const cleanliness = getCleanlinessTier(score);
+  const cleanlinessScore = getCleanlinessScore(run);
+  const cleanliness = getCleanlinessTier(cleanlinessScore);
   process.stdout.write("\n");
   process.stdout.write(chalk.bold.dim("  Technical Debt Cleanliness Score\n"));
   process.stdout.write("  " + "—".repeat(52) + "\n");
   const tierColor = cleanlinessTierColor(cleanliness.tier);
-  process.stdout.write(tierColor(`  ${cleanliness.label} (${cleanliness.tier}/5)\n`));
+  process.stdout.write(tierColor(`  ${cleanliness.label} (${cleanliness.tier} out of 5)\n`));
   process.stdout.write(tierColor(`  ${cleanliness.description}\n`));
   process.stdout.write("  " + "—".repeat(52) + "\n\n");
   process.stdout.write(chalk.bold("  Summary\n"));
@@ -224,8 +225,7 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
   if (run.debtTrend && run.debtTrend.length > 0) {
     process.stdout.write(`  Recent commits: ${chalk.cyan(String(run.debtTrend.length))}\n`);
   }
-  process.stdout.write(`  Debt score:     ${severityColor(score)} / 100\n`);
-  process.stdout.write(chalk.dim("  (weighted average of debt item severity × confidence, 0–100)\n\n"));
+  process.stdout.write(`  Score:         ${tierColor(`${cleanliness.tier} out of 5`)}\n\n`);
   const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const d of debtItems) {
     bySeverity[d.severity]++;
@@ -315,6 +315,7 @@ function severityColor(score: number): string {
   if (score >= 40) return chalk.yellow(String(score));
   return chalk.green(String(score));
 }
+
 
 function cleanlinessTierColor(tier: number): (s: string) => string {
   switch (tier) {

@@ -142,13 +142,14 @@ fileScores.forEach(function (_ref) {
   var llmScore =
     fileM && fileM.llmFileScore != null ? " (LLM debt: " + fileM.llmFileScore + "/100)" : "";
   var severity = (fileM && fileM.llmSeverity) ? fileM.llmSeverity : worstSeverity(items);
+  var basename = file.split("/").pop() || file;
   var cell = document.createElement("div");
   cell.className = "treemap-cell";
   cell.dataset.severity = severity;
-  cell.style.flex = String((score / maxScore) * 100) + " 1 80px";
-  cell.style.minWidth = "72px";
   cell.title = file + llmScore;
-  cell.textContent = file.split("/").pop() || file;
+  cell.innerHTML =
+    '<span class="treemap-cell-block" aria-hidden="true"></span>' +
+    '<span class="treemap-cell-name">' + escapeHtml(basename) + "</span>";
   cell.addEventListener("click", function () { showDetail(file, items); });
   treemapEl.appendChild(cell);
 });
@@ -319,3 +320,82 @@ function showDetail(file, items) {
     if (e.target === panel) panel.classList.remove("show");
   };
 }
+
+function buildAiCleanupPrompt() {
+  var overall = "";
+  if (DATA.llmOverallAssessment) {
+    overall = stripTrailingSeverityAndScore(DATA.llmOverallAssessment);
+  } else if (DATA.llmOverallRaw) {
+    overall = stripTrailingSeverityAndScore(DATA.llmOverallRaw);
+  }
+  var files = DATA.fileMetrics.filter(function (m) {
+    return m.llmSeverity && m.llmSeverity !== "none";
+  });
+  var parts = [];
+  parts.push("We are trying to reduce the technical debt of this repository.");
+  if (overall && overall.trim()) {
+    parts.push("");
+    parts.push("Overall assessment:");
+    parts.push(overall.trim());
+    parts.push("");
+  }
+  parts.push("The following files have been identified with fixes that are necessary:");
+  parts.push("");
+  files.forEach(function (m) {
+    parts.push(m.file);
+    var explanation = (m.llmRawAssessment || m.llmAssessment || "").trim();
+    if (explanation) explanation = stripTrailingSeverityAndScore(explanation);
+    parts.push(explanation || "(No explanation provided.)");
+    parts.push("");
+  });
+  parts.push("With those files and explanations of them in mind, lets change them to be better structured. Look at the whole codebase and those specific files for reference. Clean up anything you see might need to also be cleaned up outside of those descriptions, but mainly focus on the identified files. Keep the functionality EXACTLY THE SAME, and ensure it is the same.");
+  return parts.join("\n");
+}
+
+(function () {
+  var promptEl = document.getElementById("aiPromptsText");
+  if (promptEl) promptEl.textContent = buildAiCleanupPrompt();
+
+  var copyBtn = document.getElementById("copyAiPrompts");
+  if (copyBtn && promptEl) {
+    copyBtn.addEventListener("click", function () {
+      var text = promptEl.textContent || "";
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(
+        function () {
+          var label = copyBtn.querySelector(".btn-copy-label");
+          if (label) {
+            var orig = label.textContent;
+            label.textContent = "Copied!";
+            copyBtn.classList.add("copied");
+            setTimeout(function () {
+              label.textContent = orig;
+              copyBtn.classList.remove("copied");
+            }, 2000);
+          }
+        },
+        function () {
+          var label = copyBtn.querySelector(".btn-copy-label");
+          if (label) label.textContent = "Copy failed";
+        }
+      );
+    });
+  }
+
+  var btn = document.getElementById("btnAiPrompts");
+  var overlay = document.getElementById("aiPromptsOverlay");
+  var closeBtn = document.getElementById("closeAiPrompts");
+  var backdrop = overlay && overlay.querySelector(".overlay-backdrop");
+  if (!btn || !overlay) return;
+  function open() {
+    overlay.classList.add("show");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+  function close() {
+    overlay.classList.remove("show");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  btn.addEventListener("click", open);
+  if (closeBtn) closeBtn.addEventListener("click", close);
+  if (backdrop) backdrop.addEventListener("click", close);
+})();

@@ -1,6 +1,6 @@
 /**
- * Technical Debt Cleanliness Score: map debt score (0-100) to one of five tiers.
- * Lower debt score = higher tier (cleaner code).
+ * Technical Debt Cleanliness Score: map cleanliness score (0-100) to one of five tiers.
+ * Cleanliness: 0 = most debt, 100 = least debt. Tier 1 = worst, Tier 5 = best.
  */
 
 export interface CleanlinessTier {
@@ -17,12 +17,12 @@ const TIERS: CleanlinessTier[] = [
   { tier: 5, label: "Pure Coder", description: "Hand-crafted artisanal code, no AI needed" },
 ];
 
-/** Debt score 0-100 (higher = worse). Returns tier 1-5 (1 = worst, 5 = best). */
-export function getCleanlinessTier(debtScore: number): CleanlinessTier {
-  const clamped = Math.max(0, Math.min(100, Math.round(debtScore)));
-  if (clamped <= 20) return TIERS[4]!; // 5/5
-  if (clamped <= 40) return TIERS[3]!; // 4/5
-  if (clamped <= 60) return TIERS[2]!; // 3/5
-  if (clamped <= 80) return TIERS[1]!; // 2/5
-  return TIERS[0]!; // 1/5
+/** Cleanliness score 0-100 (0 = worst, 100 = best). Returns tier 1-5: 1 = 0-20, 2 = 21-40, 3 = 41-60, 4 = 61-80, 5 = 81-100. */
+export function getCleanlinessTier(cleanlinessScore: number): CleanlinessTier {
+  const clamped = Math.max(0, Math.min(100, Math.round(cleanlinessScore)));
+  if (clamped <= 20) return TIERS[0]!; // tier 1
+  if (clamped <= 40) return TIERS[1]!; // tier 2
+  if (clamped <= 60) return TIERS[2]!; // tier 3
+  if (clamped <= 80) return TIERS[3]!; // tier 4
+  return TIERS[4]!; // tier 5
 }

@@ -375,7 +375,7 @@ ${snippet}
 Output only:
 1. A two- to four-sentence summary of the issues (how clean/maintainable, main concerns). No code block unless absolutely necessary to demonstrate.
 2. On the next line write only one word: critical, high, medium, low, or none (this file's technical debt severity; none = no significant debt).
-3. On the line after that write only a number 0-100 (100 = most technical debt).
+3. On the line after that write only a number 0-100 (0 = most debt, 100 = least debt / cleanest).
 No preamble.`;
 
   const raw = await chat(prompt, {
@@ -405,17 +405,20 @@ export async function assessOverallCleanliness(
   const debtCount = run.debtItems.length;
   const criticalHigh = run.debtItems.filter((d) => d.severity === "critical" || d.severity === "high").length;
   const hotspots = run.fileMetrics.filter((m) => (m.hotspotScore ?? 0) > 0.3).length;
+  const allFiles = run.fileMetrics.map((m) => m.file);
   const topFiles = run.fileMetrics
     .sort((a, b) => (b.hotspotScore ?? 0) - (a.hotspotScore ?? 0))
     .slice(0, 12)
     .map((m) => m.file);
 
-  const prompt = `Codebase summary: ${fileCount} files, ${debtCount} debt items (${criticalHigh} critical/high), ${hotspots} hotspots. Top risk files: ${topFiles.join(", ")}
+  const prompt = `Codebase summary: ${fileCount} files, ${debtCount} debt items (${criticalHigh} critical/high), ${hotspots} hotspots.
+All files in this codebase: ${allFiles.join(", ")}
+Top risk files (by hotspot): ${topFiles.join(", ")}
 
 Output only:
-1. A two- to four-sentence summary of the main issues (strengths, concerns, single most important improvement). No code block unless absolutely necessary to demonstrate.
+1. A single paragraph of 5–8 sentences that gives full context for the whole codebase. Cover ALL files: briefly note which files or areas are in good shape, which have issues, and how they fit together. Include strengths, main concerns, and the single most important improvement. Write for someone who needs to understand the entire codebase, not just the problematic parts. No code block unless absolutely necessary.
 2. On the next line write only one word: critical, high, medium, low, or none (overall codebase technical debt severity).
-3. On the line after that write only a number 0-100 (100 = most debt).
+3. On the line after that write only a number 0-100 (0 = most debt, 100 = least debt / cleanest).
 No preamble.`;
 
   const raw = await chat(prompt, {

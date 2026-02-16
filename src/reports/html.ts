@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getCleanlinessTier } from "../cleanliness-score.js";
-import { getDebtScore } from "../debt-score.js";
+import { getCleanlinessScore } from "../debt-score.js";
 import type { AnalysisRun } from "../types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -27,25 +27,25 @@ export async function generateHtmlReport(
   await writeFile(outputPath, html, "utf-8");
 }
 
-/** Inline SVG badge: shield shape with tier number and "of 5". */
+/** Inline SVG badge: shield shape with tier number and "of 5" — clean, bold, tier-colored. */
 function buildScoreBadgeSvg(tier: number, fillColor: string): string {
-  const lighter = adjustHexBrightness(fillColor, 1.3);
+  const lighter = adjustHexBrightness(fillColor, 1.25);
   const shadowId = "badge-shadow-" + tier;
   const gradientId = "badge-shine-" + tier;
   return `<svg class="score-badge-svg" viewBox="0 0 140 168" xmlns="http://www.w3.org/2000/svg" role="img">
   <defs>
     <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:${lighter};stop-opacity:0.5" />
+      <stop offset="0%" style="stop-color:${lighter};stop-opacity:0.6" />
       <stop offset="100%" style="stop-color:${fillColor};stop-opacity:1" />
     </linearGradient>
-    <filter id="${shadowId}" x="-30%" y="-20%" width="160%" height="150%">
-      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-opacity="0.35"/>
+    <filter id="${shadowId}" x="-40%" y="-30%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="${fillColor}" flood-opacity="0.4"/>
     </filter>
   </defs>
   <path fill="url(#${gradientId})" filter="url(#${shadowId})" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
-  <path fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2.5" stroke-linejoin="round" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
-  <text x="70" y="78" text-anchor="middle" class="score-badge-num" fill="white">${tier}</text>
-  <text x="70" y="100" text-anchor="middle" class="score-badge-of" fill="white">of 5</text>
+  <path fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-linejoin="round" d="M70 12 C108 12 128 38 128 72 C128 106 70 156 70 156 C70 156 12 106 12 72 C12 38 32 12 70 12 Z"/>
+  <text x="70" y="80" text-anchor="middle" class="score-badge-num" fill="white">${tier}</text>
+  <text x="70" y="102" text-anchor="middle" class="score-badge-of" fill="rgba(255,255,255,0.95)">of 5</text>
 </svg>`;
 }
 
@@ -66,8 +66,9 @@ function buildHtml(
   script: string
 ): string {
   const theme = darkMode ? "dark" : "light";
-  const debtScore = getDebtScore(run);
-  const cleanliness = getCleanlinessTier(debtScore);
+  const cleanlinessScore = getCleanlinessScore(run);
+  const scoreNum = Math.round(Math.max(0, Math.min(100, cleanlinessScore)));
+  const cleanliness = getCleanlinessTier(cleanlinessScore);
   const hasLlm = !!(run.llmOverallAssessment || run.llmOverallRaw);
   const dataJson = JSON.stringify({
     fileMetrics: run.fileMetrics,
@@ -79,7 +80,8 @@ function buildHtml(
     summary: {
       filesAnalyzed: run.fileMetrics.length,
       debtCount: run.debtItems.length,
-      debtScore,
+      debtScore: 100 - cleanlinessScore,
+      cleanlinessScore: scoreNum,
       cleanlinessTier: cleanliness.tier,
       cleanlinessLabel: cleanliness.label,
       cleanlinessDescription: cleanliness.description,
@@ -93,35 +95,6 @@ function buildHtml(
   ).length;
   const hotspotCount = run.fileMetrics.filter((m) => (m.hotspotScore ?? 0) > 0.3).length;
 
-  const tierColors: Record<number, string> = {
-    1: "#c00",
-    2: "#e85d00",
-    3: "#b8860b",
-    4: "#069",
-    5: "#0a6b0a",
-  };
-  const tierColor = tierColors[cleanliness.tier] ?? "#666";
-  const scoreBadgeSvg = buildScoreBadgeSvg(cleanliness.tier, tierColor);
-
-  const llmPanelHtml =
-    run.llmOverallAssessment || run.llmOverallRaw
-      ? `
-    <div class="panel panel-llm">
-      <div class="panel-header">
-        <h2 class="panel-title">LLM overall assessment</h2>
-      </div>
-      <div class="panel-body">
-        <div class="llm-output">${
-          run.llmOverallAssessment
-            ? renderLlmOutputToHtml(run.llmOverallAssessment)
-            : '<div class="llm-prose">' +
-              escapeHtml(stripTrailingSeverityAndScore(run.llmOverallRaw ?? "")).replace(/\n/g, "<br>") +
-              "</div>"
-        }</div>
-      </div>
-    </div>`
-      : "";
-
   const statsLine = `${run.fileMetrics.length} files · ${run.debtItems.length} items · ${highCriticalCount} high/crit · ${hotspotCount} hotspots`;
 
   return `<!DOCTYPE html>
@@ -130,82 +103,137 @@ function buildHtml(
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
-  <meta property="og:title" content="${escapeHtml(title)} — ${cleanliness.tier}/5 ${escapeHtml(cleanliness.label)}" />
+  <meta property="og:title" content="${escapeHtml(title)} — ${cleanliness.tier} out of 5 ${escapeHtml(cleanliness.label)}" />
   <meta property="og:description" content="${escapeHtml(cleanliness.description)}" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="${escapeHtml(title)} — ${cleanliness.tier}/5" />
+  <meta name="twitter:title" content="${escapeHtml(title)} — ${cleanliness.tier} out of 5" />
   <meta name="twitter:description" content="${escapeHtml(cleanliness.label)}: ${escapeHtml(cleanliness.description)}" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>${css}</style>
 </head>
 <body class="dashboard-page">
   ${!hasLlm ? `<div class="no-llm-banner"><p class="no-llm-cta">Analysis run without LLM — for full results, run with LLM</p></div>` : ""}
   <header class="dashboard-header">
     <div class="dashboard-header-left">
-      <div class="dashboard-score-badge tier-${cleanliness.tier}" aria-label="Score ${cleanliness.tier} of 5">${scoreBadgeSvg}</div>
-      <div class="dashboard-hero">
-        <h1 class="dashboard-title">${escapeHtml(title)}</h1>
-        <p class="dashboard-blurb">${escapeHtml(cleanliness.description)}</p>
-        <span class="dashboard-meta">${escapeHtml(run.repoPath)}</span>
-      </div>
+      <h1 class="dashboard-title">${escapeHtml(title)}</h1>
+      <span class="dashboard-meta">${escapeHtml(run.repoPath)}</span>
     </div>
     <div class="dashboard-header-right">
-      <span class="dashboard-stats">${statsLine}</span>
+      <div class="dashboard-score tier-${cleanliness.tier}" aria-label="Score ${cleanliness.tier} out of 5">
+        <span class="dashboard-score-value">${cleanliness.tier}</span>
+        <span class="dashboard-score-of"> out of 5</span>
+        <span class="dashboard-score-label">${escapeHtml(cleanliness.label)}</span>
+      </div>
+      <button type="button" class="btn-ai-prompts btn-ai-prompts-header" id="btnAiPrompts">AI cleanup prompts</button>
       <span class="dashboard-date">${run.completedAt ?? run.startedAt}</span>
     </div>
   </header>
 
   <main class="dashboard-main">
-    ${llmPanelHtml}
-
-    <div class="panel panel-heatmap">
-      <div class="panel-header panel-header-heatmap">
-        <h2 class="panel-title">Files by debt</h2>
-        <p class="panel-desc">Size = complexity + churn. Color = severity (static or LLM). Click for details.</p>
-        <div class="legend legend-inline">
-          <span><span class="swatch swatch-crit"></span> Critical</span>
-          <span><span class="swatch swatch-high"></span> High</span>
-          <span><span class="swatch swatch-med"></span> Medium</span>
-          <span><span class="swatch swatch-low"></span> Low</span>
-          <span><span class="swatch swatch-none"></span> None</span>
+    <div class="dashboard-grid-2x2">
+      <div class="dashboard-cell dashboard-cell-score">
+        <div class="panel panel-score panel-score-pop" data-tier="${cleanliness.tier}">
+          <div class="panel-header">
+            <h2 class="panel-title">Technical Debt Cleanliness Score</h2>
+          </div>
+          <div class="panel-body panel-body-score">
+            <div class="score-numeric">
+              <span class="score-num">${cleanliness.tier}</span>
+              <span class="score-of"> out of 5</span>
+            </div>
+            <p class="score-label">${escapeHtml(cleanliness.label)}</p>
+            <p class="score-desc">${escapeHtml(cleanliness.description)}</p>
+            <p class="score-stats">${statsLine}</p>
+          </div>
         </div>
       </div>
-      <div class="panel-body panel-body-heatmap">
-        <div id="treemap"></div>
+
+      <div class="dashboard-cell dashboard-cell-heatmap">
+        <div class="panel panel-heatmap">
+          <div class="panel-header panel-header-heatmap">
+            <h2 class="panel-title">Files by debt</h2>
+            <div class="panel-heatmap-row">
+              <p class="panel-desc">Size = complexity + churn. Color = severity. Click for details.</p>
+              <div class="legend legend-inline">
+                <span><span class="swatch swatch-crit"></span> Critical</span>
+                <span><span class="swatch swatch-high"></span> High</span>
+                <span><span class="swatch swatch-med"></span> Medium</span>
+                <span><span class="swatch swatch-low"></span> Low</span>
+                <span><span class="swatch swatch-none"></span> None</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel-body panel-body-heatmap">
+            <div id="treemap"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-cell dashboard-cell-problems">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Description of problems</h2>
+          </div>
+          <div class="panel-body">
+            ${run.llmOverallAssessment || run.llmOverallRaw
+              ? `<div class="llm-output">${
+                  run.llmOverallAssessment
+                    ? renderLlmOutputToHtml(run.llmOverallAssessment)
+                    : '<div class="llm-prose">' +
+                      escapeHtml(stripTrailingSeverityAndScore(run.llmOverallRaw ?? "")).replace(/\n/g, "<br>") +
+                      "</div>"
+                }</div>`
+              : '<p class="panel-empty">Run with LLM for an overall assessment of problems.</p>'}
+            <div class="priority-inline">
+              <div class="priority-inline-col">
+                <h4>High impact, easier</h4>
+                <ul id="q1" class="priority-list"></ul>
+              </div>
+              <div class="priority-inline-col">
+                <h4>High impact, harder</h4>
+                <ul id="q2" class="priority-list"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-cell dashboard-cell-list">
+        <div class="panel panel-list">
+          <div class="panel-header">
+            <h2 class="panel-title">Ratings & files</h2>
+            <p class="panel-desc">Files rated above none by static or LLM. Click for full details.</p>
+          </div>
+          <div class="panel-body">
+            <ul class="debt-list" id="debtList"></ul>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="dashboard-grid dashboard-grid-half">
-      <div class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">High impact, easier</h2>
-          <p class="panel-desc">High severity in smaller files.</p>
-        </div>
-        <div class="panel-body">
-          <ul id="q1" class="priority-list"></ul>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">High impact, harder</h2>
-          <p class="panel-desc">Critical or hotspot files.</p>
-        </div>
-        <div class="panel-body">
-          <ul id="q2" class="priority-list"></ul>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <h2 class="panel-title">Files with debt (static or LLM)</h2>
-        <p class="panel-desc">Every file rated above none by static analysis or LLM. Click a row for full ratings and explanations.</p>
-      </div>
-      <div class="panel-body">
-        <ul class="debt-list" id="debtList"></ul>
-      </div>
-    </div>
+    <div class="dashboard-footer"></div>
   </main>
+
+  <div id="aiPromptsOverlay" class="overlay" aria-hidden="true">
+    <div class="overlay-backdrop"></div>
+    <div class="overlay-panel">
+      <div class="overlay-header">
+        <h2 class="overlay-title">AI cleanup prompts</h2>
+        <button type="button" class="overlay-close" id="closeAiPrompts" aria-label="Close">&times;</button>
+      </div>
+      <div class="overlay-body">
+        <p class="overlay-plan-mode">Give this prompt to a <strong>PLAN MODE</strong> AI or coding agent (e.g. plan mode in your IDE).</p>
+        <div class="overlay-prompt-wrap">
+          <pre id="aiPromptsText" class="overlay-prompt-text"></pre>
+        </div>
+        <button type="button" class="btn-copy-prompt" id="copyAiPrompts" aria-label="Copy prompt">
+          <span class="btn-copy-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+          <span class="btn-copy-label">Copy prompt</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <div id="detail">
     <div class="panel">

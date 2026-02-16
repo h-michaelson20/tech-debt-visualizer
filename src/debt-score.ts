@@ -15,10 +15,8 @@ function getStaticDebtScore(run: AnalysisRun): number {
 }
 
 /**
- * Debt score 0–100. Uses a single consistent source when LLM is available so overall and file scores match:
- * - If LLM overall score is set: use it as-is.
- * - Else if any file has LLM file score: use average of those.
- * - Else: static score from debt items.
+ * Debt score 0–100 (higher = more debt). Stored and computed internally; for display use getCleanlinessScore.
+ * When LLM is used, we store debt = 100 - llm_cleanliness so that this still returns "debt".
  */
 export function getDebtScore(run: AnalysisRun): number {
   if (run.llmOverallScore != null) {
@@ -32,4 +30,9 @@ export function getDebtScore(run: AnalysisRun): number {
     return Math.min(100, Math.max(0, Math.round(avg)));
   }
   return getStaticDebtScore(run);
+}
+
+/** Cleanliness score 0–100 (0 = most debt, 100 = least debt). Use this for display and tier. */
+export function getCleanlinessScore(run: AnalysisRun): number {
+  return 100 - getDebtScore(run);
 }
