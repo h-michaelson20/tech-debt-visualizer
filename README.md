@@ -84,7 +84,7 @@ Requires **Node 18+**.
 | `--llm` | Enable LLM (default). Use with `--llm-key` and/or `--llm-model` |
 | `--llm-key <key>` | API key (overrides env / `.env`) |
 | `--llm-model <model>` | Model name (e.g. `gemini-1.5-flash`, `gpt-4o-mini`) |
-| `--ci` | Terse output; exit code 1 if debt score &gt; 60 |
+| `--ci` | Terse output; exit code 1 if debt score &gt; 3 |
 
 Examples:
 
