@@ -2,7 +2,7 @@
 
 **[tech-debt-visualizer](https://www.npmjs.com/package/tech-debt-visualizer)** on npm
 
-Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional **AI explanations and refactor suggestions**—in the terminal or as an interactive HTML report.
+Analyze a repo and get a cleanliness score, debt breakdown, and AI explanations and refactor suggestions in the terminal or as an interactive HTML report.
 
 ![npm version](https://img.shields.io/npm/v/tech-debt-visualizer)
 ![npm downloads](https://img.shields.io/npm/dm/tech-debt-visualizer)
