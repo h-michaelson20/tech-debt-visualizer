@@ -1,5 +1,7 @@
 # Technical Debt Visualizer
 
+**[tech-debt-visualizer](https://www.npmjs.com/package/tech-debt-visualizer)** on npm
+
 Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional **AI explanations and refactor suggestions**—in the terminal or as an interactive HTML report.
 
 ![Node 18+](https://img.shields.io/badge/node-%3E%3D18-brightgreen?style=flat-square)
@@ -11,14 +13,15 @@ Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional
 ## Quick start
 
 ```bash
+# From this repo (clone, install, build):
 git clone <this-repo>
 cd tech-debt-visualizer
 npm install && npm run build
 node dist/cli.js analyze . --format cli
 ```
 
-To try the **HTML dashboard**:  
-`node dist/cli.js analyze . --format html -o report.html` then open `report.html`.
+To try the **HTML dashboard** (no install):  
+`npx tech-debt-visualizer analyze . --format html -o report.html` then open `report.html`.
 
 To use **AI insights** (explanations + optional code refactors): set `GEMINI_API_KEY` or `OPENAI_API_KEY` and run the same commands without `--no-llm`.
 
