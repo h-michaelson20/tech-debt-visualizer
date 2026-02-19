@@ -2,7 +2,7 @@
 
 **[tech-debt-visualizer](https://www.npmjs.com/package/tech-debt-visualizer)** on npm
 
-Analyze a repo and get a cleanliness score, debt breakdown, and AI explanations and refactor suggestions in the terminal or as an interactive HTML report.
+Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional **AI explanations and refactor suggestions**—in the terminal or as an interactive HTML report.
 
 ![npm version](https://img.shields.io/npm/v/tech-debt-visualizer)
 ![npm downloads](https://img.shields.io/npm/dm/tech-debt-visualizer)
@@ -12,20 +12,40 @@ Analyze a repo and get a cleanliness score, debt breakdown, and AI explanations 
 
 ---
 
-## Quick start
+## From the get-go
+
+**Option A — No install (run from any folder):**
 
 ```bash
-# From this repo (clone, install, build):
-git clone <this-repo>
-cd tech-debt-visualizer
-npm install && npm run build
-node dist/cli.js analyze . --format cli
+npx tech-debt-visualizer analyze .
 ```
 
-To try the **HTML dashboard** (no install):  
-`npx tech-debt-visualizer analyze . --format html -o report.html` then open `report.html`.
+**Option B — Install once, then run:**
 
-To use **AI insights** (explanations + optional code refactors): set `GEMINI_API_KEY` or `OPENAI_API_KEY` and run the same commands without `--no-llm`.
+```bash
+npm install -g tech-debt-visualizer
+tech-debt-visualizer analyze .
+```
+
+That's the command: **`tech-debt-visualizer analyze .`** (the `.` is "this folder"). You get a terminal report: cleanliness tier (1–5), debt items, hotspots, and a "what to fix" list. No config required. Node 18+.
+
+- **HTML report?** Add `-f html -o report.html`, then open the file.
+- **No API key?** Add `--no-llm` for metrics only (no AI).
+
+More options: run **`tech-debt-visualizer analyze --help`** (or with `npx` if you didn't install globally).
+
+---
+
+## How to run it
+
+| What you want | Command |
+|----------------|--------|
+| **Terminal report** | `tech-debt-visualizer analyze .` (or `npx tech-debt-visualizer analyze .` if not installed) |
+| **HTML report** | `tech-debt-visualizer analyze . -f html -o report.html` |
+| **No AI (no API key)** | `tech-debt-visualizer analyze . --no-llm` |
+| **From this repo (dev)** | `npm run build` then `npm run analyze` |
+
+Use **`tech-debt-visualizer`** (not `tech-debt`); `npx tech-debt` is a different package.
 
 ---
 
@@ -65,43 +85,29 @@ So: **static metrics + git → score & tier → optional LLM explanations and co
 
 ---
 
-## Install & run
-
-| How you run it | Command |
-|----------------|--------|
-| **From this repo** | `node dist/cli.js analyze [path]` (after `npm run build`) |
-| **Global (after publish)** | `npm install -g tech-debt-visualizer` then `tech-debt analyze [path]` |
-| **No install (after publish)** | `npx tech-debt-visualizer analyze [path]` |
-
-Use **`tech-debt-visualizer`** in the command (not `tech-debt`); `npx tech-debt` runs a different npm package. From this repo you can also run `npm run analyze` or `node dist/cli.js analyze .`.
-
-Requires **Node 18+**.
-
----
-
 ## Options
 
 | Option | Meaning |
 |--------|--------|
 | `-f, --format` | `cli` (default), `html`, `json`, or `markdown` |
-| `-o, --output` | Output path (e.g. `report.html` for HTML) |
-| `--no-llm` | Skip all LLM calls (no API key needed) |
-| `--llm` | Enable LLM (default). Use with `--llm-key` and/or `--llm-model` |
+| `-o, --output` | Output file path (for html/json/markdown) |
+| `--no-llm` | Skip AI insights (no API key needed) |
 | `--llm-key <key>` | API key (overrides env / `.env`) |
 | `--llm-model <model>` | Model name (e.g. `gemini-1.5-flash`, `gpt-4o-mini`) |
-| `--ci` | Terse output; exit code 1 if debt score &gt; 3 |
+| `--ci` | CI mode: terse output; exit 1 if debt is high |
 
 Examples:
 
 ```bash
-node dist/cli.js analyze . -f html -o report.html
-node dist/cli.js analyze ./src -f json -o debt.json
-node dist/cli.js analyze . --ci
-# With LLM key and model on the command line:
-node dist/cli.js analyze . --llm-key YOUR_GEMINI_KEY --llm-model gemini-1.5-flash
-# Or use a .env file in the current directory (GEMINI_API_KEY=...)
-node dist/cli.js analyze .
+npx tech-debt-visualizer analyze .
+npx tech-debt-visualizer analyze . -f html -o report.html
+npx tech-debt-visualizer analyze ./src -f json -o debt.json
+npx tech-debt-visualizer analyze . --no-llm
+npx tech-debt-visualizer analyze . --ci
+npx tech-debt-visualizer analyze . --llm-key YOUR_KEY --llm-model gemini-1.5-flash
 ```
+
+Full list: `npx tech-debt-visualizer analyze --help`
 
 ---
 

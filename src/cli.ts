@@ -3,8 +3,10 @@
  * CLI entry: colorful terminal output, progress bars, actionable insights.
  * Loads .env from cwd first; supports --llm-key and --llm-model.
  */
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadEnv } from "./load-env.js";
 import { Command } from "commander";
 import chalk from "chalk";
@@ -22,26 +24,49 @@ import { generateJsonReport } from "./reports/json.js";
 import { generateMarkdownReport } from "./reports/markdown.js";
 import { type AnalysisRun, SEVERITY_ORDER } from "./types.js";
 
+function getVersion(): string {
+  try {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const pkgPath = join(__dirname, "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    return (pkg && pkg.version) || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 const program = new Command();
 
 program
-  .name("tech-debt")
-  .description("Analyze repositories and visualize technical debt with AI-powered insights")
-  .version("0.1.2");
+  .name("tech-debt-visualizer")
+  .description("Analyze a repo and get a cleanliness score, debt breakdown, and optional AI insights. No install required.")
+  .version(getVersion());
 
 program
   .command("analyze")
-  .description("Analyze a repository and output report")
-  .argument("[path]", "Repository path", ".")
-  .option("-o, --output <path>", "Output file path (default: report.html or stdout for CLI)")
+  .description("Analyze a folder (default: current directory) and print or save a report")
+  .argument("[path]", "Path to the repo or folder to analyze", ".")
   .option("-f, --format <type>", "Output format: cli | html | json | markdown", "cli")
-  .option("--no-llm", "Skip LLM-powered insights")
-  .option("--llm", "Enable LLM (default). Use with --llm-key and/or --llm-model")
+  .option("-o, --output <path>", "Write output to this file (for html/json/markdown)")
+  .option("--no-llm", "Skip AI insights (no API key needed; use this for a quick run)")
+  .option("--llm", "Enable AI insights (default when an API key is set)")
   .option("--llm-key <key>", "API key (overrides env: GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY)")
-  .option("--llm-endpoint <url>", "OpenAI-compatible API base URL (e.g. https://api.openai.com/v1 or proxy)")
+  .option("--llm-endpoint <url>", "OpenAI-compatible API base URL")
   .option("--llm-model <model>", "Model name (e.g. gpt-4o-mini, gemini-2.5-flash)")
   .option("--llm-max-tokens <n>", "Max tokens per response", (v) => parseInt(v, 10))
-  .option("--ci", "CI mode: minimal output, exit with non-zero if debt score is high")
+  .option("--ci", "CI mode: terse output; exit 1 if debt is high")
+  .addHelpText(
+    "after",
+    `
+Quick start:
+  npx tech-debt-visualizer analyze .              No install: analyze current folder → terminal report
+  tech-debt-visualizer analyze .                  Same, if you ran: npm install -g tech-debt-visualizer
+  tech-debt-visualizer analyze . -f html -o report.html   Save interactive HTML report
+  tech-debt-visualizer analyze . --no-llm         Skip AI (no API key needed)
+
+Requires Node 18+. For AI insights, set GEMINI_API_KEY or OPENAI_API_KEY (or use --llm-key).
+`
+  )
   .action(async (path: string, opts: { output?: string; format?: string; llm?: boolean; ci?: boolean; llmKey?: string; llmEndpoint?: string; llmModel?: string; llmMaxTokens?: number }) => {
     const repoPath = join(process.cwd(), path);
     const format = (opts.format ?? "cli") as "cli" | "html" | "json" | "markdown";
@@ -293,7 +318,7 @@ function printCliReport(run: AnalysisRun, ci: boolean): void {
     process.stdout.write(chalk.dim("  No debt items. Keep it up.\n"));
   }
   process.stdout.write("\n");
-  process.stdout.write(chalk.dim("  Run with --format html -o report.html for the interactive dashboard.\n\n"));
+  process.stdout.write(chalk.dim("  Tip: npx tech-debt-visualizer analyze . -f html -o report.html → interactive dashboard.\n\n"));
 }
 
 function severityOrder(s: string): number {
