@@ -10,6 +10,12 @@ Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 
+### Preview
+
+| | | | |
+|:---:|:---:|:---:|:---:|
+| ![Score 2](2_score.png) | ![Score 3](3_score.png) | ![Score 4](4_score.png) | ![Score 5](5_score.png) |
+
 ---
 
 ## From the get-go
