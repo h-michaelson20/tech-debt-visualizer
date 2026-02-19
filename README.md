@@ -10,12 +10,6 @@ Analyze a repo and get a **cleanliness score**, **debt breakdown**, and optional
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 
-### Preview
-
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![Score 2](2_score.png) | ![Score 3](3_score.png) | ![Score 4](4_score.png) | ![Score 5](5_score.png) |
-
 ---
 
 ## From the get-go
@@ -52,6 +46,12 @@ More options: run **`tech-debt-visualizer analyze --help`** (or with `npx` if yo
 | **From this repo (dev)** | `npm run build` then `npm run analyze` |
 
 Use **`tech-debt-visualizer`** (not `tech-debt`); `npx tech-debt` is a different package.
+
+### Preview
+
+![Score 2](images/2_score.png) ![Score 3](images/3_score.png)
+
+![Score 4](images/4_score.png) ![Score 5](images/5_score.png)
 
 ---
 
