@@ -50,7 +50,7 @@ Use **`tech-debt-visualizer`** (not `tech-debt`); `npx tech-debt` is a different
 ### Scoring Preview
 
 <p align="center">
-  <img src="images/3_score.png" alt="Score 3" width="45%" /> <img src="images/2_score.png" alt="Score 2" width="45%" /><br>
+  <img src="images/2_score.png" alt="Score 3" width="45%" /> <img src="images/3_score.png" alt="Score 2" width="45%" /><br>
   <img src="images/4_score.png" alt="Score 4" width="45%" /> <img src="images/5_score.png" alt="Score 5" width="45%" />
 </p>
 
